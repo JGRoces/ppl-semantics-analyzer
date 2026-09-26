@@ -2,7 +2,7 @@
 
 Guidelines for our 4-person group. Please read before your first commit.
 
-**Architectural pivot:** We've moved off Streamlit and onto a native desktop UI built with **CustomTkinter**. The old `app.py` presentation layer is being replaced by the `ui/` package. `core/` (backend analysis + execution) is unaffected — if you were assigned a `core/` file before the pivot, nothing changes for you.
+> 🔄 **Architectural pivot:** We've moved off Streamlit and onto a native desktop UI built with **CustomTkinter**. The old `app.py` presentation layer is being replaced by the `ui/` package — which now also includes an entry launcher (`ui/launcher_window.py`) shown before the main dashboard opens. `core/` (backend analysis + execution) is unaffected — if you were assigned a `core/` file before the pivot, nothing changes for you.
 
 ---
 
@@ -17,7 +17,7 @@ We use a **strict 2-branch model**:
 
 All work happens on **feature branches** that merge into `dev` via Pull Request. `main` only receives merges from `dev` when we're ready to present.
 
-**Protection expectation:** Both `main` and `dev` should be set as protected branches in GitHub settings (require PR review before merge, no force-push) once the repo is created.
+> 🔒 **Protection expectation:** Both `main` and `dev` should be set as protected branches in GitHub settings (require PR review before merge, no force-push) once the repo is created.
 
 Feature branch naming convention:
 
@@ -108,20 +108,22 @@ Per academic integrity policy, log any AI-assisted work here (or in a shared doc
 
 ## File Ownership & Task Distribution
 
-Update this table in your first PR so everyone knows their lane. `div` labels match the grid map documented at the top of `ui/main_window.py`.
+> Update this table in your first PR so everyone knows their lane. `div` labels match the grid map documented at the top of `ui/main_window.py`.
 
 | Module/File | Owner | Status |
 | :--- | :--- | :--- |
-| `main.py` (entry point) | *(assign)* | Not started |
-| `ui/ui_assets.py` (design tokens/theme) | *(assign)* | Not started |
+| `main.py` (entry point — launcher → dashboard) | *(assign)* | Not started |
+| `ui/ui_assets.py` (design tokens/theme, light + dark) | *(assign)* | Not started |
+| `ui/launcher_window.py` (entry launcher window) | *(assign)* | Not started |
 | `ui/main_window.py` (grid skeleton) | *(assign)* | Not started |
-| `div1` Header panel | *(assign)* | Not started |
-| `div3` Left Rail (language select / run controls) | *(assign)* | Not started |
-| `div5` Code Editor — Snippet A | *(assign)* | Not started |
-| `div6` Code Editor — Snippet B | *(assign)* | Not started |
-| `div4` Right Rail (status / metadata) | *(assign)* | Not started |
-| `div7` Analytics panel (Static AST / Runtime / PPL Verdict) | *(assign)* | Not started |
+| `div1` Header (title, view tabs, dark-mode switch) | *(assign)* | Not started |
 | `div2` Footer | *(assign)* | Not started |
+| `div3` Sidebar 1 | *(assign)* | Not started |
+| `div4` Editor A | *(assign)* | Not started |
+| `div5` Editor B | *(assign)* | Not started |
+| `div6` Results | *(assign)* | Not started |
+| `div7` Analytics Title | *(assign)* | Not started |
+| `div8` Tools Sidebar | *(assign)* | Not started |
 | `core/ast_analyzer.py` | *(assign)* | Not started |
 | `core/execution_runner.py` | *(assign)* | Not started |
 | `tests/test_cases.py` | *(assign)* | Not started |
