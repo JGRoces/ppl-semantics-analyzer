@@ -1,249 +1,209 @@
-"""
-core/execution_runner.py
+"""Run local teaching snippets outside the GUI process.
 
-Dynamic tracing engine for the PPL Semantics Analyzer.
-
-PPL concept in play: this module is the counterpart to
-`core/ast_analyzer.py`'s static analysis. Where that module inspects
-*structure* without running anything, this one observes *runtime
-behavior* -- actual stdout, actual errors, actual timing -- which is
-where semantics (what the program really does) becomes observable, as
-opposed to syntax (what the program looks like).
-
-Execution is always isolated in a subprocess, never via exec()/eval()
-in-process. This matters for two reasons:
-  1. Safety: a hung or crashing snippet can't take the Streamlit app
-     down with it -- we can kill the subprocess and keep going.
-  2. Language-agnosticism: subprocess isolation lets us shell out to
-     `node` or a compiled C++ binary exactly the same way we shell out
-     to `python3`, using one consistent code path.
-
-This is a TEACHING-GRADE sandbox, not a production-grade one. It
-enforces a wall-clock timeout but does NOT fully restrict filesystem or
-network access from within the executed snippet. Do not point it at
-untrusted code outside a controlled demo/lab environment.
+A temporary working directory keeps ordinary relative file writes away from the
+project. Time and output limits keep common demo mistakes manageable. This is
+process isolation, not a security sandbox: only run code you trust.
 """
 
-import copy
+import math
+import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
-from typing import Optional
 
 DEFAULT_TIMEOUT_SECONDS = 5
-
+MAX_OUTPUT_BYTES = 64 * 1024
 SUPPORTED_LANGUAGES = ("python", "javascript", "cpp")
 
-# Result dict shape kept identical across languages and failure modes so
-# the Streamlit Runtime Execution tab never has to special-case keys.
-_RESULT_TEMPLATE = {
-    "language": None,
-    "stdout": "",
-    "stderr": "",
-    "exit_code": None,
-    "duration_ms": 0.0,
-    "timed_out": False,
-    "compiled": None,   # True/False for C++, None for interpreted languages
-    "setup_error": None,  # e.g. "node not found on PATH" -- distinct from a
-                           # runtime error produced BY the snippet itself
-}
 
-
-def execute_code(code_string: str, language: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> dict:
-    """Execute a source snippet in an isolated subprocess and trace it.
+def runtime_paths() -> dict:
+    """Locate the executables used by the three language adapters.
 
     Args:
-        code_string: Raw source code to execute.
-        language: One of "python", "javascript", "cpp" (case-insensitive).
-        timeout: Maximum wall-clock seconds allowed before the process
-            is killed and the result is marked `timed_out`.
-
+        None.
     Returns:
-        A dictionary always containing every key in `_RESULT_TEMPLATE`:
-        stdout, stderr, exit_code, duration_ms, timed_out, compiled,
-        and setup_error. Exactly one of these paths happens:
-          - Normal run: exit_code is set (0 or nonzero), stdout/stderr
-            captured, setup_error is None.
-          - Timeout: timed_out=True, exit_code=None.
-          - Environment problem (e.g. `node` not installed, or a C++
-            compile failure): setup_error is set describing the problem;
-            this is NOT the same as the snippet raising a runtime error.
+        Mapping from language ID to executable path, or None if absent.
+    """
+    return {
+        "python": sys.executable,
+        "javascript": shutil.which("node") or shutil.which("nodejs"),
+        "cpp": shutil.which("g++") or shutil.which("clang++"),
+    }
 
+
+def _empty_result(language: str) -> dict:
+    """Create independent result state for one snippet.
+
+    Args:
+        language: Normalized language ID.
+    Returns:
+        A result with all fields present, including separate compile diagnostics.
+    """
+    return {
+        "language": language, "stdout": "", "stderr": "", "exit_code": None,
+        "duration_ms": 0.0, "timed_out": False, "compiled": None,
+        "setup_error": None, "status": "pending", "output_limited": False,
+        "cancelled": False, "compile_duration_ms": 0.0, "compile_stderr": "",
+    }
+
+
+def execute_code(code_string: str, language: str,
+                 timeout: float = DEFAULT_TIMEOUT_SECONDS, stdin: str = "",
+                 cancel_event: threading.Event | None = None) -> dict:
+    """Validate, prepare, and execute a Python, Node.js, or C++17 snippet.
+
+    Args:
+        code_string: Source text, written as UTF-8 in a temporary directory.
+        language: python, javascript, or cpp (case insensitive).
+        timeout: Positive finite execution budget in seconds, at most 30.
+        stdin: Text supplied to standard input; EOF follows immediately.
+        cancel_event: Optional cooperative cancellation signal from the UI.
+    Returns:
+        Consistent diagnostics. Compilation errors are distinct from missing
+        tools; C++ compilation time is separate from process execution time.
     Raises:
-        TypeError: If `code_string` is not a string.
-        ValueError: If `language` is not one of SUPPORTED_LANGUAGES.
+        TypeError: Source or stdin is not text.
+        ValueError: Language or timeout is invalid.
     """
-    if not isinstance(code_string, str):
-        raise TypeError(f"code_string must be a str, got {type(code_string).__name__}")
-
-    normalized_language = (language or "").strip().lower()
-    if normalized_language not in SUPPORTED_LANGUAGES:
-        raise ValueError(
-            f"Unsupported language '{language}'. Must be one of {SUPPORTED_LANGUAGES}."
-        )
-
-    # deepcopy (not dict()) so no state can ever leak between calls if
-    # this template grows list/dict fields later -- see the same fix
-    # and rationale in core/ast_analyzer.py.
-    result = copy.deepcopy(_RESULT_TEMPLATE)
-    result["language"] = normalized_language
-
+    if not isinstance(code_string, str) or not isinstance(stdin, str):
+        raise TypeError("Source and stdin must be strings.")
+    language = (language or "").strip().lower()
+    if language not in SUPPORTED_LANGUAGES:
+        raise ValueError(f"Unsupported language: {language!r}")
+    if (isinstance(timeout, bool) or not isinstance(timeout, (int, float))
+            or not math.isfinite(timeout) or not 0 < timeout <= 30):
+        raise ValueError("Timeout must be a finite number greater than 0 and at most 30.")
+    result = _empty_result(language)
     if not code_string.strip():
-        result["setup_error"] = "Empty snippet -- nothing to execute."
+        result.update(status="input_error", setup_error="Empty snippet.")
         return result
-
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_path = Path(tmp_dir)
-
-        if normalized_language == "python":
-            return _run_python(code_string, tmp_path, timeout, result)
-        elif normalized_language == "javascript":
-            return _run_javascript(code_string, tmp_path, timeout, result)
-        else:  # cpp
-            return _run_cpp(code_string, tmp_path, timeout, result)
-
-
-def _run_python(code_string: str, tmp_path: Path, timeout: int, result: dict) -> dict:
-    """Run a Python snippet using the same interpreter running this app.
-
-    Args:
-        code_string: Python source code.
-        tmp_path: Temporary directory to write the script into.
-        timeout: Timeout in seconds.
-        result: Partially-filled result dict to populate in place.
-
-    Returns:
-        The populated result dict.
-    """
-    script_path = tmp_path / "snippet.py"
-    script_path.write_text(code_string, encoding="utf-8")
-    return _run_and_time([sys.executable, str(script_path)], timeout, result)
-
-
-def _run_javascript(code_string: str, tmp_path: Path, timeout: int, result: dict) -> dict:
-    """Run a JavaScript snippet with Node.js, if available.
-
-    Args:
-        code_string: JavaScript source code.
-        tmp_path: Temporary directory to write the script into.
-        timeout: Timeout in seconds.
-        result: Partially-filled result dict to populate in place.
-
-    Returns:
-        The populated result dict. If `node` is not on PATH,
-        `setup_error` is set instead of attempting to run.
-    """
-    node_path = shutil.which("node") or shutil.which("nodejs")
-    if node_path is None:
-        result["setup_error"] = (
-            "Node.js runtime not found on PATH. Install Node.js to enable "
-            "JavaScript execution (this teammate's machine or the demo "
-            "machine may simply be missing it)."
-        )
+    executable = runtime_paths()[language]
+    if executable is None:
+        result.update(status="setup_error", setup_error={
+            "javascript": "Node.js was not found on PATH.",
+            "cpp": "g++ or clang++ was not found on PATH.",
+        }.get(language, "Python interpreter was not found."))
         return result
-
-    script_path = tmp_path / "snippet.js"
-    script_path.write_text(code_string, encoding="utf-8")
-    return _run_and_time([node_path, str(script_path)], timeout, result)
-
-
-def _run_cpp(code_string: str, tmp_path: Path, timeout: int, result: dict) -> dict:
-    """Compile a C++ snippet with g++, then execute the resulting binary.
-
-    Compilation happens outside the timed execution window -- only the
-    run of the compiled binary is measured, so a slow compile doesn't
-    unfairly count against the snippet's "execution time" in the
-    comparative display.
-
-    Args:
-        code_string: C++ source code.
-        tmp_path: Temporary directory to write source/binary into.
-        timeout: Timeout in seconds, applied to the *run* step only.
-        result: Partially-filled result dict to populate in place.
-
-    Returns:
-        The populated result dict. If `g++` is not on PATH or
-        compilation fails, `compiled` is False and `setup_error` /
-        `stderr` describe why -- this is treated as distinct from a
-        runtime error produced by a successfully-compiled program.
-    """
-    gpp_path = shutil.which("g++")
-    if gpp_path is None:
-        result["setup_error"] = (
-            "g++ compiler not found on PATH. Install a C++ toolchain to "
-            "enable C++ execution."
-        )
-        result["compiled"] = False
-        return result
-
-    source_path = tmp_path / "snippet.cpp"
-    binary_path = tmp_path / "snippet_bin"
-    source_path.write_text(code_string, encoding="utf-8")
 
     try:
-        compile_result = subprocess.run(
-            [gpp_path, str(source_path), "-o", str(binary_path), "-std=c++17"],
-            capture_output=True,
-            text=True,
-            timeout=timeout + 10,  # compilation gets its own generous budget
-        )
-    except subprocess.TimeoutExpired:
-        result["compiled"] = False
-        result["setup_error"] = "Compilation itself timed out."
-        return result
+        with tempfile.TemporaryDirectory(prefix="ppl-demo-") as directory:
+            workdir = Path(directory)
+            extension = {"python": "py", "javascript": "js", "cpp": "cpp"}[language]
+            source = workdir / f"snippet.{extension}"
+            source.write_text(code_string, encoding="utf-8")
+            if language == "cpp":
+                binary = workdir / ("snippet.exe" if os.name == "nt" else "snippet")
+                compilation = _run_process(
+                    [executable, str(source), "-std=c++17", "-o", str(binary)],
+                    workdir, min(timeout + 10, 30), "", cancel_event,
+                )
+                result["compile_duration_ms"] = compilation["duration_ms"]
+                result["compile_stderr"] = compilation["stderr"]
+                result["compiled"] = compilation["status"] == "success"
+                if not result["compiled"]:
+                    # A rejected program is a source/compilation error, not an
+                    # installation error. Preserve cancellation and timeout flags.
+                    for key in ("stderr", "exit_code", "timed_out", "cancelled",
+                                "output_limited", "setup_error"):
+                        result[key] = compilation[key]
+                    result["status"] = ("compile_error" if compilation["status"] == "runtime_error"
+                                        else "compile_" + compilation["status"])
+                    return result
+                command = [str(binary)]
+            elif language == "python":
+                # -u preserves output printed immediately before a timeout;
+                # -I ignores user site packages and PYTHON* environment settings.
+                command = [executable, "-I", "-u", str(source)]
+            else:
+                command = [executable, str(source)]
+            result.update(_run_process(command, workdir, timeout, stdin, cancel_event))
+    except OSError as exc:
+        result.update(status="setup_error", setup_error=str(exc))
+    return result
 
-    if compile_result.returncode != 0:
-        result["compiled"] = False
-        result["setup_error"] = "Compilation failed."
-        result["stderr"] = compile_result.stderr
-        return result
 
-    result["compiled"] = True
-    return _run_and_time([str(binary_path)], timeout, result)
-
-
-def _run_and_time(command: list, timeout: int, result: dict) -> dict:
-    """Run a command as a subprocess, capturing output and timing it.
+def _stop_process(process: subprocess.Popen) -> None:
+    """Stop a process and, on POSIX, its process group.
 
     Args:
-        command: Argument list to pass to `subprocess.run`.
-        timeout: Maximum wall-clock seconds before the process is killed.
-        result: Partially-filled result dict to populate in place.
-
+        process: Child started by _run_process in a new POSIX session.
     Returns:
-        The populated result dict with stdout, stderr, exit_code,
-        duration_ms, and timed_out set.
+        None. Already exited processes are harmless.
     """
-    start_time = time.monotonic()
     try:
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        duration_ms = (time.monotonic() - start_time) * 1000
-        result["stdout"] = completed.stdout
-        result["stderr"] = completed.stderr
-        result["exit_code"] = completed.returncode
-        result["duration_ms"] = round(duration_ms, 3)
-        result["timed_out"] = False
-        return result
+        if os.name == "posix":
+            os.killpg(process.pid, signal.SIGKILL)
+        elif process.poll() is None:
+            process.kill()
+    except ProcessLookupError:
+        pass
 
-    except subprocess.TimeoutExpired as exc:
-        duration_ms = (time.monotonic() - start_time) * 1000
-        result["stdout"] = exc.stdout or ""
-        result["stderr"] = (exc.stderr or "") + f"\n[Killed: exceeded {timeout}s timeout]"
-        result["exit_code"] = None
-        result["duration_ms"] = round(duration_ms, 3)
-        result["timed_out"] = True
-        return result
 
-    except FileNotFoundError as exc:
-        # The interpreter/binary itself couldn't be launched at all --
-        # distinct from the snippet failing once it started running.
-        result["setup_error"] = f"Could not launch process: {exc}"
-        return result
+def _run_process(command: list, workdir: Path, timeout: float, stdin: str,
+                 cancel_event: threading.Event | None) -> dict:
+    """Capture bounded text while polling for exit, cancellation, and limits.
+
+    Args:
+        command: Executable and arguments; never interpreted by a shell.
+        workdir: Temporary source and working directory.
+        timeout: Wall-clock budget for this phase only.
+        stdin: Finite UTF-8 input supplied through a temporary file.
+        cancel_event: Optional UI cancellation event.
+    Returns:
+        Process-specific fields to merge into the language result.
+    """
+    result = {key: value for key, value in _empty_result("").items()
+              if key not in ("language", "compiled", "compile_duration_ms", "compile_stderr")}
+    start = time.monotonic()
+    # Files avoid pipe deadlocks and unbounded in-memory communicate() buffers.
+    # The cap is checked every 10 ms, so disk writes can overshoot it briefly.
+    with tempfile.TemporaryFile() as input_file, tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
+        input_file.write(stdin.encode("utf-8"))
+        input_file.seek(0)
+        process = None
+        try:
+            if cancel_event is not None and cancel_event.is_set():
+                result.update(status="cancelled", cancelled=True)
+                return result
+            process = subprocess.Popen(
+                command, cwd=workdir, stdin=input_file, stdout=output,
+                stderr=errors, start_new_session=os.name == "posix",
+            )
+            while True:
+                output_size = os.fstat(output.fileno()).st_size + os.fstat(errors.fileno()).st_size
+                if cancel_event is not None and cancel_event.is_set():
+                    result.update(status="cancelled", cancelled=True)
+                    break
+                if output_size > MAX_OUTPUT_BYTES:
+                    result.update(status="output_limit", output_limited=True)
+                    break
+                if process.poll() is not None:
+                    result.update(exit_code=process.returncode,
+                                  status="success" if process.returncode == 0 else "runtime_error")
+                    break
+                if time.monotonic() - start >= timeout:
+                    result.update(status="timeout", timed_out=True)
+                    break
+                time.sleep(0.01)
+        except OSError as exc:
+            result.update(status="setup_error", setup_error=f"Could not launch process: {exc}")
+        finally:
+            if process is not None:
+                # Also clean up ordinary descendants after the parent exits.
+                _stop_process(process)
+                process.wait()
+            result["duration_ms"] = round((time.monotonic() - start) * 1000, 3)
+            output.seek(0)
+            errors.seek(0)
+            result["stdout"] = output.read(MAX_OUTPUT_BYTES).decode("utf-8", errors="replace")
+            result["stderr"] = errors.read(MAX_OUTPUT_BYTES).decode("utf-8", errors="replace")
+    if result["timed_out"]:
+        result["stderr"] += f"\n[Stopped: exceeded {timeout:g}s timeout]"
+    if result["output_limited"]:
+        result["stderr"] += "\n[Stopped: output limit exceeded; captured text is truncated]"
+    return result

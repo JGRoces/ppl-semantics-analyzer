@@ -1,29 +1,26 @@
 # PPL Semantics Analyzer
 
-> An interactive meta-system for analyzing, executing, and comparing core Principles of Programming Languages concepts — side by side.
+An interactive desktop system for comparing **Python, JavaScript, and C++** through editable examples, structural analysis, and real execution.
 
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![CustomTkinter](https://img.shields.io/badge/UI-CustomTkinter-1f6feb)
-![Status](https://img.shields.io/badge/status-in--development-yellow)
-![License](https://img.shields.io/badge/license-academic--use-lightgrey)
+Built for **CSS125P – Principles of Programming Languages**, **Group 4: Programming Language Comparison and Demonstration System**.
 
-Built for **CSS125P – Principles of Programming Languages**, Group 4 project: *Programming Language Comparison and Demonstration System*.
+## Start here for the presentation
 
----
+On the presentation Mac, run these commands from the repository directory:
 
-## Table of Contents
+```bash
+venv/bin/python -m core.self_check
+venv/bin/python main.py
+```
 
-- [Authors](#authors)
-- [Tech Stack](#tech-stack)
-- [Installation & Setup](#installation--setup)
-- [Directory Layout](#directory-layout)
-- [System Architecture](#system-architecture)
-- [Design System](#design-system)
-- [Known Limitations](#known-limitations)
-- [Documentation Sections](#documentation-sections-syllabus-requirement)
-- [Testing](#testing)
+The first command runs a real factorial program in each language, including C++ compilation. All three should print `PASS`. The second opens the launcher; choose two languages and click **Start Diagnostics**. No browser, server, or internet connection is needed after installation.
 
----
+Choose a lesson, click **Load lesson into both editors**, then **Run comparison**. Use **Static AST**, **Runtime**, and **PPL Verdict** to inspect structure, output/errors, and language concepts. Changing a language preserves the source; click **Load lesson** to replace it with the corresponding example. Loading a lesson intentionally replaces both editors and standard input.
+
+- [Presentation and rehearsal guide](docs/presentation.md): a short demo sequence, expected outputs, team handoffs, and likely questions.
+- [Required project documentation](docs/documentation.md): all 11 syllabus sections.
+- [Detailed code walkthrough](docs/code_walkthrough.md): the logic of each module, function, and demo.
+- [Contributor guidance](CONTRIBUTING.md): branch workflow, code conventions, ownership, and AI assistance log.
 
 ## Authors
 
@@ -32,158 +29,106 @@ Built for **CSS125P – Principles of Programming Languages**, Group 4 project: 
 | Joseph Gabriel A. Roces | Lead Developer | [@JGRoces](https://github.com/JGRoces) |
 | Marc Jansen D. Felipe | Developer | [@marcjfe](https://github.com/marcjfe) |
 | Nikolai P. Lagarde | Developer | [@lagardenikolai](https://github.com/lagardenikolai) |
-| Danaiah Niccola D. Bajao | Developer | *(TBD)* |
+| Danaiah Niccola D. Bajao | Developer | Handle to be supplied by the team |
 
-> ⚠️ **Action needed:** Add Danaiah's GitHub handle before submission.
+## What works
 
----
+- Two independent source editors with language selectors and UTF-8 file loading.
+- Nine lessons: recursion, iteration, lexical scope, types/coercion, parameter passing, input validation, syntax errors, runtime errors, and timeouts.
+- Python tokenization, AST display, structural metrics, and syntax/context validation without execution.
+- Clearly labeled approximate structural analysis for JavaScript and C++.
+- Real subprocess execution with standard input, stdout/stderr capture, exit status, timing, Stop, timeout, and bounded captured output.
+- Separate C++ compile diagnostics and compilation timing.
+- Responsive UI: background computation returns reports through a queue; only the main thread updates Tk.
+- Language reference profiles and source-specific observations, including successful-output comparison.
+- Markdown/JSON report export containing source, input, diagnostics, and all three views.
+- Consistent flat design, light/dark mode, and launcher language/theme handoff.
 
-## Tech Stack
+## Installation from a fresh clone
 
-| Layer | Technology |
-| :--- | :--- |
-| Core Language | Python 3.10+ |
-| Desktop UI | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) (native `tkinter`-based GUI) |
-| Static Analysis | Native Python `ast` module & tokenization |
-| Dynamic Tracing | Native Python `subprocess` (isolated execution, timeout-enforced) |
-| Testing | `pytest` |
-| Version Control | Git — strict 2-branch model (`main` / `dev`) |
-
-> 🔄 **Architectural pivot:** We moved off Streamlit's browser-based UI in favor of a native desktop app built with CustomTkinter. The `core/` backend (AST analysis, subprocess execution) is unchanged — only the presentation layer moved, from `app.py` (Streamlit) to the new `ui/` package (CustomTkinter).
-
----
-
-## Installation & Setup
+Python **3.10+ with Tk support** is required. JavaScript execution requires Node.js on `PATH`; C++ execution requires `g++` or `clang++` with C++17 support. Missing tools produce a setup diagnostic; Python analysis can still work.
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/JGRoces/ppl-semantics-analyzer.git
-cd ppl-semantics-analyzer
-
-# 2. Create and activate a virtual environment
 python3 -m venv venv
-source venv/bin/activate        # macOS/Linux
-venv\Scripts\activate           # Windows
-
-# 3. Install dependencies
-pip install -r requirements.txt
-# (requirements.txt now pulls in customtkinter instead of streamlit)
-pip install customtkinter
-
-# 4. Run the app
+source venv/bin/activate
+python -m pip install -r requirements.txt
+python -m core.self_check
 python main.py
 ```
 
-> 💡 CustomTkinter opens a native desktop window — no browser, no local server, no port to remember.
+`venv` keeps dependencies local to the project. Activation makes `python` point to that environment. The requirements install CustomTkinter and pytest; the unused pandas dependency has been removed. The self-check verifies actual execution before opening the desktop application.
 
----
+On Windows, activate with `venv\Scripts\activate` instead of `source venv/bin/activate`. This release was verified on the presentation Mac; Windows GUI behavior has not been verified.
 
-## Directory Layout
+## Directory layout
 
-> **Changed:** the Streamlit `app.py` presentation layer has been replaced by a `ui/` package built on CustomTkinter, which now includes an entry launcher (`launcher_window.py`) shown before the main dashboard. `core/` (backend analysis + execution) is untouched by this pivot.
-
-```
-ppl-semantics-analyzer/
-├── main.py                         # Entry point — shows LauncherWindow, then MainWindow if started
-├── requirements.txt                # Pinned dependencies (customtkinter, not streamlit)
-├── README.md
-├── CONTRIBUTING.md
-├── LICENSE
-├── .gitignore
-├── core/
-│   ├── ast_analyzer.py             # Static analysis: true ast parse (Python) + regex fallback (JS/C++)
-│   └── execution_runner.py         # Isolated, timeout-enforced execution (Python/Node/g++)
-├── ui/
-│   ├── __init__.py
-│   ├── ui_assets.py                # Design-token manager: colors (light/dark-aware), fonts, corner_radius=0
-│   ├── launcher_window.py          # HWiNFO-style entry launcher: language selects, Start/Cancel, dark-mode switch
-│   └── main_window.py              # CTk root window: 10x10 grid, 8-div dashboard layout, dark-mode switch
-├── tests/
-│   └── test_cases.py               # Required minimum test cases (normal + error)
-└── docs/
-    └── documentation.md            # 11-section syllabus documentation
+```text
+main.py                     Launcher → dashboard entry point
+core/
+  ast_analyzer.py            Tokenization, parsing, and structural evidence
+  execution_runner.py        Local subprocess execution and resource limits
+  examples.py                Nine lessons and expected results
+  comparison.py              Comparison pipeline, language profiles, report text
+  self_check.py              Actual runtime/compiler readiness check
+ui/
+  launcher_window.py         Language and appearance selection
+  main_window.py             Eight-panel dashboard and worker lifecycle
+  ui_assets.py               Shared design tokens and widget style helpers
+tests/
+  test_cases.py              Automated backend, regression, and demo tests
+  gui_smoke.py               Opt-in native GUI integration check
+docs/
+  documentation.md          Required 11-section submission write-up
+  code_walkthrough.md       Detailed implementation explanations
+  presentation.md           Rehearsal and oral-defense notes
 ```
 
-> `.gitignore` excludes build/runtime artifacts such as `ui/__pycache__/` and `.venv/` — they exist locally but aren't tracked, so you won't see them in a fresh clone.
+Each stage has one responsibility. `core/` has no UI dependency, so tests can run without opening windows. The UI snapshots source and input, calls the comparison service, and displays the returned evidence.
 
-**Why this layout?** Each stage of the PPL pipeline (*Source → Lexical/AST Analysis → Execution → Output*) stays isolated in its own module, and the UI never performs analysis or execution directly — it only calls into `core/`. This still means:
-- A bug or infinite loop in a user's snippet can't crash the UI (subprocess isolation).
-- Analysis logic can be unit-tested independently of the UI framework.
-- Each group member can own one panel (`div`) or one backend module without merge conflicts.
+## Architecture
 
----
-
-## System Architecture
-
-```
- Launcher (ui/launcher_window.py — language select, Start Diagnostics)
-          │
-          ▼
- Source Input (Snippet A / Snippet B, each with its own language)
-          │
-          ▼
- Lexical / AST Analysis  (core/ast_analyzer.py)
-          │
-          ▼
- Subprocess Execution    (core/execution_runner.py)
-          │
-          ▼
- Comparative Metric Display (ui/main_window.py — grid panels: editors, sidebars, results)
+```text
+Launcher: choose languages and appearance
+    ↓
+Dashboard: source A + source B + shared standard input
+    ↓
+Worker: Python tokenizer/AST or JS/C++ surface analysis
+    ↓
+Optional execution: CPython / Node.js / C++17 compiler → native binary
+    ↓
+Queue → main GUI thread → Static AST / Runtime / PPL Verdict
+    ↓
+Optional Markdown or JSON report export
 ```
 
-| Stage | Module | Responsibility |
-| :--- | :--- | :--- |
-| Launcher | `ui/launcher_window.py` | Entry screen shown before the dashboard: target-language selects, Start/Cancel, closes itself and opens `MainWindow` on Start |
-| Lexical/AST Analysis | `core/ast_analyzer.py` | True `ast` parse for Python (functions, recursion, loops, scope depth, exception usage); regex-token fallback for JavaScript/C++ |
-| Execution | `core/execution_runner.py` | Runs the snippet in an isolated subprocess with a hard timeout; dispatches to the Python interpreter, Node.js, or a compiled g++ binary depending on language; captures stdout/stderr/duration in ms |
-| Desktop UI | `ui/main_window.py` + `ui/ui_assets.py` | Renders the native dashboard: header (title, view tabs, dark-mode switch), sidebars, code editors for Snippet A/B, and the results strip |
+**Analyze only** performs inspection without running either snippet. **Run comparison** also launches the relevant toolchain. C++ type checks happen in the compiler; Python/JavaScript runtime errors come from the real interpreter/engine. The project does not implement a complete independent semantic checker for all three languages.
 
----
+## Design philosophy
 
-## Design System
+The original **eight panels on a 10×10 grid** are preserved. Their resize weights accommodate real editors and output; their agreed grid positions are unchanged.
 
-The UI follows a deliberately strict, flat aesthetic — no rounded corners, no gradients, no drop shadows. All tokens live in `ui/ui_assets.py` so no other module hard-codes a color or font:
+- Flat surfaces, sharp corners, no gradients or shadows.
+- White/black mode-aware surfaces with blue actions, green Run, and red Stop.
+- All colors, fonts, and corner radii come from `ui/ui_assets.py`.
+- Scrollable lesson controls and result columns keep longer diagnostics accessible.
+- Editing source or stdin invalidates previous results to prevent stale evidence.
 
-- **Corners:** `corner_radius=0` on every frame, button, and textbox — sharp 90° edges throughout (the one accepted exception being the circular handle on `CTkSwitch`, which CustomTkinter doesn't expose a corner-radius control for).
-- **Palette:** Pure white/black base that flips with a Dark Mode switch (`#FFFFFF` background + black text in Light, `#000000`/`#0A0A0A` background + white text in Dark), with blue, red, and green reserved for primary, warning/destructive, and success actions respectively in both modes.
-- **Typography:** A clean sans-serif (Segoe UI) for UI chrome; a monospace face (Consolas) for the code editors.
-
-See `ui/ui_assets.py` for the full token set — mode-aware tokens are stored as `(light, dark)` tuples that CustomTkinter resolves automatically — and the `UIAssets.apply_theme()` / `UIAssets.set_dark_mode()` / `*_kwargs()` helpers that enforce it consistently.
-
----
-
-## Known Limitations
-
-- **Python's `ast` module only parses Python.** JavaScript and C++ snippets are analyzed with a regex-based token fallback instead of a true parse tree (see `core/ast_analyzer.py`). This is an approximation — it can miscount in edge cases (e.g. a keyword appearing inside a string) — and `max_scope_depth` is deliberately left `None` for these languages rather than guessed at with brace-counting.
-- **The subprocess sandbox is teaching-grade, not production-grade.** It enforces a wall-clock timeout but does not fully restrict filesystem or network access. Do not point it at untrusted code outside a controlled demo environment.
-- **Multi-language execution requires the matching runtime on the host machine.** JavaScript needs `node` on PATH; C++ needs `g++`. If either is missing, `execution_runner.py` reports a `setup_error` instead of crashing, but the language simply won't run on that machine until the toolchain is installed.
-- **Type Systems and Parameter Passing concepts are not yet implemented** in the results/verdict display — pending a design decision (static language-level lookup table vs. per-snippet inference). The view itself is wired through the header's Static AST / Runtime / PPL Verdict tabs, rendering into `div6` (Results).
-- **The UI skeleton is layout-only for now.** `ui/main_window.py` and `ui/launcher_window.py` currently place empty, labeled stub frames and non-functional controls; wiring real widgets and backend calls into each `div` is tracked per-owner in `CONTRIBUTING.md`.
-
----
-
-## Documentation Sections (Syllabus Requirement)
-
-Full write-ups live in [`docs/documentation.md`](docs/documentation.md). Outline:
-
-1. Project Title and Introduction
-2. Problem Statement
-3. General and Specific Objectives
-4. Programming Language Concepts Applied
-5. Language/Program Design
-6. Keywords, Identifiers, Operators, Literals, Data Types, Statements, Expressions
-7. Grammar / Syntax Rules
-8. Program Architecture / Flow
-9. Implementation Details
-10. Testing and Results
-11. Conclusion and Recommendations
-
----
-
-## Testing
+## Verification
 
 ```bash
-pytest tests/test_cases.py -v
+venv/bin/python -m pytest -q
+venv/bin/python -m tests.gui_smoke
 ```
 
-Includes required minimum test cases covering both normal execution (recursion detection, successful subprocess run) and error handling (malformed syntax, runtime exception, timeout enforcement).
+The first command runs automated tests, including all 27 lesson/language combinations and normal/error inputs. Tool-dependent tests skip explicitly if their runtime is missing. The second deliberately opens native windows and checks the launcher, worker, result tabs, file loading, export, errors, Stop, and recovery.
+
+Verified on **2026-09-28** on the presentation Mac: Python 3.14.7, Node.js 26.9.0, Apple clang 21.0.0, CustomTkinter 5.2.2. See the testing section in the project documentation for recorded results. Desktop screenshot inspection was unavailable; native widget/callback tests were run.
+
+## Limits to explain honestly
+
+- **Python is parsed; JavaScript/C++ structure is estimated.** Surface patterns do not support their complete grammars. Unknown scope depth is shown as unknown; runtime/compiler diagnostics are obtained on Run.
+- **Recursion detection finds candidates.** It recognizes simple same-name self-calls, not all possible aliases, mutual recursion, virtual dispatch, overload resolution, or rebinding.
+- **Counts are descriptive.** Python and surface heuristics have different coverage. Unique variable spellings are not a full scoped symbol table.
+- **Matching stdout for one input does not prove semantic equivalence.** Process timings include startup and are not rigorous performance benchmarks.
+- **Run trusted classroom snippets only.** A temporary working directory, time limit, and output cap do not restrict filesystem/network access. Captured stdout and stderr are capped at 64 KiB each; their combined file size is polled against a 64 KiB stop threshold and may briefly overshoot. macOS/POSIX process groups clean up ordinary descendants; detached processes and Windows descendants are not fully contained.
+- **The app is a comparison system.** It does not define a new language or implement a full compiler. Title/tool approval remains the instructor's decision.

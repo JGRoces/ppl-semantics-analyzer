@@ -9,8 +9,7 @@ MainWindow. If they cancel or close the launcher instead, the app
 exits without ever opening the dashboard.
 
 This file stays thin on purpose — it only sequences the two windows.
-Backend wiring (core/ast_analyzer.py, core/execution_runner.py) into
-either window's frames happens in a later pass, not here.
+The dashboard owns UI wiring; core modules remain usable without a GUI.
 """
 
 from ui.launcher_window import LauncherWindow
@@ -32,7 +31,7 @@ def main() -> None:
     if launcher.result != "start":
         return
 
-    app = MainWindow()
+    app = MainWindow(*launcher.selected_languages, dark_mode=launcher.dark_mode)
     app.mainloop()
 
 

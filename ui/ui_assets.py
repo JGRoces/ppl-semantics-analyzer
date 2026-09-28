@@ -299,6 +299,27 @@ class UIAssets:
         }
 
     @classmethod
+    def option_menu_kwargs(cls) -> dict:
+        """Return design tokens for a flat language or lesson selector.
+
+        Args:
+            None.
+        Returns:
+            CTkOptionMenu keyword arguments shared across panels.
+        """
+        return {
+            "corner_radius": cls.CORNER_RADIUS,
+            "fg_color": cls.COLORS["BLUE"],
+            "button_color": cls.COLORS["BLUE"],
+            "button_hover_color": cls.COLORS["BLUE_PRESSED"],
+            "dropdown_fg_color": cls.COLORS["SURFACE"],
+            "dropdown_text_color": cls.COLORS["TEXT_PRIMARY"],
+            "dropdown_hover_color": cls.COLORS["TINT_NEUTRAL_A"],
+            "text_color": cls.COLORS["TEXT_ON_ACCENT"],
+            "font": cls.FONTS["BODY"],
+        }
+
+    @classmethod
     def label_kwargs(cls, style: str = "body") -> dict:
         """Return standard kwargs for a CTkLabel in a given text style.
 

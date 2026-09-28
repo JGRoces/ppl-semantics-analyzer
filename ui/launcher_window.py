@@ -52,6 +52,8 @@ class LauncherWindow(ctk.CTk):
         UIAssets.apply_theme()
 
         self.result = "cancelled"
+        self.selected_languages = ("Python", "JavaScript")
+        self.dark_mode = True
 
         self.title("PPL Semantics Analyzer — Launcher")
         self._window_width = 720
@@ -132,6 +134,7 @@ class LauncherWindow(ctk.CTk):
         self.language_a_combo = ctk.CTkComboBox(
             selects_row,
             values=self.LANGUAGE_OPTIONS,
+            state="readonly",
             corner_radius=UIAssets.CORNER_RADIUS,
             border_width=UIAssets.BORDER_WIDTH,
             fg_color=UIAssets.COLORS["SURFACE"],
@@ -148,6 +151,7 @@ class LauncherWindow(ctk.CTk):
         self.language_b_combo = ctk.CTkComboBox(
             selects_row,
             values=self.LANGUAGE_OPTIONS,
+            state="readonly",
             corner_radius=UIAssets.CORNER_RADIUS,
             border_width=UIAssets.BORDER_WIDTH,
             fg_color=UIAssets.COLORS["SURFACE"],
@@ -184,7 +188,7 @@ class LauncherWindow(ctk.CTk):
 
         version_label = ctk.CTkLabel(
             self.div1_panel,
-            text="v0.1.0 — UI scaffolding",
+            text="Group 4 — Programming Language Comparison System",
             **UIAssets.label_kwargs("label"),
         )
         version_label.configure(text_color=UIAssets.COLORS["TEXT_MUTED"])
@@ -239,7 +243,7 @@ class LauncherWindow(ctk.CTk):
         Returns:
             tuple: (language_a, language_b) as selected strings.
         """
-        return (self.language_a_combo.get(), self.language_b_combo.get())
+        return self.selected_languages
 
     def _on_start(self) -> None:
         """Mark the launcher's result as "start" and close the window.
@@ -250,6 +254,9 @@ class LauncherWindow(ctk.CTk):
         Returns:
             None.
         """
+        # Read Tk variables before destroy(); accessing them afterward is invalid.
+        self.selected_languages = (self.language_a_combo.get(), self.language_b_combo.get())
+        self.dark_mode = self.appearance_switch_var.get() == "dark"
         self.result = "start"
         self.destroy()
 

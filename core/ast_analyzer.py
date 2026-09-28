@@ -1,328 +1,238 @@
-"""
-core/ast_analyzer.py
+"""Inspect syntax without executing code.
 
-Static analysis engine for the PPL Semantics Analyzer.
-
-PPL concept in play here: SYNTAX vs. SEMANTICS. This module only looks
-at the *shape* of the code (syntax) — it never executes anything. That
-distinction matters for the course: `ast_analyzer.py` answers "what
-does this program's structure tell us?" while `execution_runner.py`
-(the dynamic tracing engine) answers "what does this program actually
-do when run?". Keeping them separate mirrors how real compilers/
-interpreters separate a parsing phase from an execution phase.
-
-Two analysis strategies are used, chosen by `language`:
-
-1. Python -> Python's built-in `ast` module builds a real Abstract
-   Syntax Tree. This is a true parse: it understands nested scope,
-   knows a `def` from a `lambda`, and can't be fooled by a variable
-   named "for". This is the gold-standard approach and is only
-   possible here because we're analyzing Python with a Python
-   interpreter.
-
-2. JavaScript / C++ (or anything else) -> Python's `ast` module cannot
-   parse non-Python grammars, so we fall back to a REGEX-BASED
-   TOKENIZER. This is a deliberately weaker technique: it pattern-matches
-   surface tokens (keywords, brace-delimited blocks) instead of building
-   a real parse tree. It is intentionally included as a teaching point —
-   see PPL concept note in `_analyze_regex_fallback` below — but its
-   results are approximate and should be presented as such in the UI
-   (e.g. a "parse_method: regex" flag is included in the returned dict).
+Python uses its real tokenizer and AST. JavaScript/C++ use explicitly labeled
+surface heuristics; their syntax and type errors are diagnosed by Node/compiler
+when Run is selected. Structural evidence is not proof of runtime behavior.
 """
 
 import ast
-import copy
+import io
+import keyword
 import re
-from typing import Optional
-
-# Metrics that should exist in EVERY result dict, regardless of language
-# or parse method, so the Streamlit "PPL Verdict" tab can always safely
-# compare Snippet A vs Snippet B without doing per-language key checks.
-_RESULT_TEMPLATE = {
-    "language": None,
-    "parse_method": None,      # "ast" or "regex"
-    "line_count": 0,
-    "function_count": 0,
-    "function_names": [],
-    "recursive_functions": [],
-    "variable_count": 0,
-    "variable_names": [],
-    "loop_count": 0,
-    "max_scope_depth": None,   # only reliably known for Python (ast method)
-    "uses_exception_handling": False,
-    "syntax_error": None,      # populated only if parsing/tokenizing failed
-}
+import tokenize
 
 SUPPORTED_LANGUAGES = ("python", "javascript", "cpp")
 
 
 def analyze_ast(code_string: str, language: str) -> dict:
-    """Run static structural analysis on a source code snippet.
-
-    Dispatches to a true AST parse for Python, or a regex-based
-    fallback tokenizer for other supported languages.
+    """Collect comparable structural metrics and explain their limitations.
 
     Args:
-        code_string: Raw source code to analyze.
-        language: One of "python", "javascript", "cpp" (case-insensitive).
-            Unrecognized languages are treated as generic C-family syntax
-            via the regex fallback rather than raising, so the UI never
-            hard-crashes on an unexpected selector value.
-
+        code_string: Source to inspect, without executing it.
+        language: python, javascript, or cpp, case insensitive.
     Returns:
-        A dictionary of structural metrics. Always contains every key
-        listed in `_RESULT_TEMPLATE`, so downstream comparison code can
-        rely on a consistent shape regardless of language.
-
+        Fresh metrics, token preview, and parsing evidence for one snippet.
     Raises:
-        TypeError: If `code_string` is not a string.
+        TypeError: Source is not text.
+        ValueError: Language is not supported.
     """
     if not isinstance(code_string, str):
-        raise TypeError(f"code_string must be a str, got {type(code_string).__name__}")
-
-    normalized_language = (language or "").strip().lower()
-    # IMPORTANT: use deepcopy, not dict(_RESULT_TEMPLATE). A shallow copy
-    # would share the SAME list objects (function_names, variable_names,
-    # etc.) across every call, silently leaking state between snippets.
-    result = copy.deepcopy(_RESULT_TEMPLATE)
-    result["language"] = normalized_language
-    result["line_count"] = len(code_string.splitlines())
-
+        raise TypeError("code_string must be a string")
+    language = (language or "").strip().lower()
+    if language not in SUPPORTED_LANGUAGES:
+        raise ValueError(f"Unsupported language: {language!r}")
+    result = {
+        "language": language, "parse_method": "ast" if language == "python" else "regex",
+        "line_count": len(code_string.splitlines()), "function_count": 0,
+        "function_names": [], "recursive_functions": [], "variable_count": 0,
+        "variable_names": [], "loop_count": 0, "branch_count": 0,
+        "max_scope_depth": None, "uses_exception_handling": False,
+        "syntax_error": None, "syntax_validated": False, "token_count": 0,
+        "token_preview": [], "structure_preview": "", "warnings": [],
+    }
     if not code_string.strip():
         result["syntax_error"] = "Empty snippet."
         return result
-
-    if normalized_language == "python":
-        return _analyze_python_ast(code_string, result)
-
-    # JavaScript, C++, and any unrecognized language all use the same
-    # surface-token fallback. Real per-language grammars would require
-    # a dedicated parser (e.g. Esprima for JS, a Clang binding for C++),
-    # which is out of scope for a syllabus-level static analyzer.
-    return _analyze_regex_fallback(code_string, result, normalized_language)
+    if language == "python":
+        return _analyze_python(code_string, result)
+    return _analyze_surface(code_string, result)
 
 
-def _analyze_python_ast(code_string: str, result: dict) -> dict:
-    """Populate `result` using Python's native `ast` module.
+def _analyze_python(source: str, result: dict) -> dict:
+    """Tokenize, parse, and inspect Python, preserving useful error evidence.
 
     Args:
-        code_string: Python source code.
-        result: The partially-filled result dict to populate in place.
-
+        source: Python text.
+        result: Fresh result dictionary populated in place.
     Returns:
-        The same `result` dict, now populated (or with `syntax_error` set).
+        Metrics or a syntax diagnostic with line/column information.
     """
-    result["parse_method"] = "ast"
-
+    tokens = []
     try:
-        tree = ast.parse(code_string)
-    except SyntaxError as exc:
-        result["syntax_error"] = f"{exc.msg} (line {exc.lineno}, offset {exc.offset})"
+        for token in tokenize.generate_tokens(io.StringIO(source).readline):
+            if token.type in (tokenize.ENCODING, tokenize.ENDMARKER, tokenize.NL,
+                              tokenize.NEWLINE, tokenize.COMMENT):
+                continue
+            category = "KEYWORD" if keyword.iskeyword(token.string) else tokenize.tok_name[token.type]
+            tokens.append({"kind": category, "text": token.string,
+                           "line": token.start[0], "column": token.start[1] + 1})
+    except (tokenize.TokenError, IndentationError):
+        # ast.parse supplies the more useful grammar diagnostic below.
+        pass
+    result["token_count"] = len(tokens)
+    result["token_preview"] = tokens[:60]
+    try:
+        tree = ast.parse(source)
+        # Parsing alone allows some context-invalid forms (e.g. top-level
+        # return). Compilation checks those rules without executing anything.
+        compile(tree, "<snippet>", "exec")
+    except (SyntaxError, ValueError) as exc:
+        result["syntax_error"] = (
+            f"{getattr(exc, 'msg', str(exc))} "
+            f"(line {getattr(exc, 'lineno', '?')}, column {getattr(exc, 'offset', '?')})"
+        )
         return result
-
+    result["syntax_validated"] = True
+    names = set()
     for node in ast.walk(tree):
-        # PPL concept: FUNCTIONS/PROCEDURES & RECURSION.
-        # A function is recursive if it calls its own name anywhere in
-        # its own body -- that's the textbook definition we implement.
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            result["function_count"] += 1
             result["function_names"].append(node.name)
             if _python_function_is_recursive(node):
                 result["recursive_functions"].append(node.name)
-
-        # PPL concept: CONTROL STRUCTURES (iteration).
-        elif isinstance(node, (ast.For, ast.While)):
+        if isinstance(node, ast.Lambda):
+            result["function_names"].append(f"<lambda at line {node.lineno}>")
+        if isinstance(node, (ast.For, ast.AsyncFor, ast.While, ast.comprehension)):
             result["loop_count"] += 1
-
-        # PPL concept: VARIABLES, BINDING.
-        # Assignment is where a name gets bound to a value/object.
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    result["variable_count"] += 1
-                    result["variable_names"].append(target.id)
-
-        # PPL concept: ERROR HANDLING (exception-based model).
-        elif isinstance(node, ast.Try):
+        if isinstance(node, (ast.If, ast.IfExp, ast.Match)):
+            result["branch_count"] += 1
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            names.add(node.id)
+        if isinstance(node, ast.arg):
+            names.add(node.arg)
+        if isinstance(node, ast.ExceptHandler) and node.name:
+            names.add(node.name)
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                if alias.name != "*":
+                    names.add(alias.asname or alias.name.split(".")[0])
+        if isinstance(node, (ast.Try, getattr(ast, "TryStar", ast.Try))):
             result["uses_exception_handling"] = True
-
+    result["function_count"] = len(result["function_names"])
+    result["variable_names"] = sorted(names)
+    result["variable_count"] = len(names)
     result["max_scope_depth"] = _python_scope_depth(tree)
+    result["structure_preview"] = ast.dump(tree, indent=2)[:12000]
+    result["warnings"] = [
+        "Recursion means a direct same-name call in a function body; aliases, methods, mutual recursion and rebinding are not resolved.",
+        "Variables count unique stored/parameter/import/exception names across the snippet, not separate bindings per scope; function/class names are excluded.",
+        "Scope depth measures nested function/class/lambda/comprehension syntax, not a complete Python name-resolution model.",
+    ]
     return result
 
 
-def _python_function_is_recursive(func_node) -> bool:
-    """Check whether a Python function calls itself.
+def _python_function_is_recursive(function: ast.AST) -> bool:
+    """Look for direct same-name calls, excluding separately nested scopes.
 
     Args:
-        func_node: An `ast.FunctionDef` or `ast.AsyncFunctionDef` node.
-
+        function: FunctionDef or AsyncFunctionDef node.
     Returns:
-        True if the function body contains a call to its own name.
+        Whether the body contains a syntactic direct self-call candidate.
     """
-    func_name = func_node.name
-    for node in ast.walk(func_node):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            if node.func.id == func_name:
-                return True
+    pending = list(function.body)
+    while pending:
+        node = pending.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            continue
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == function.name):
+            return True
+        pending.extend(ast.iter_child_nodes(node))
     return False
 
 
 def _python_scope_depth(tree: ast.AST) -> int:
-    """Compute the deepest nested function/class scope in a Python AST.
-
-    PPL concept: SCOPE & BINDING. Python uses lexical (static) scoping,
-    so nesting depth here directly reflects how many enclosing scopes a
-    name lookup may have to walk through.
+    """Measure structural nesting of constructs that introduce Python scopes.
 
     Args:
-        tree: The parsed module AST.
-
+        tree: Parsed module.
     Returns:
-        Integer depth; 0 means no nested function/class scopes.
+        Maximum nesting depth; module itself has depth zero.
     """
-    def walk(node, depth):
-        deepest = depth
-        for child in ast.iter_child_nodes(node):
-            child_depth = depth
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                child_depth = depth + 1
-            deepest = max(deepest, walk(child, child_depth))
-        return deepest
+    scope_nodes = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda,
+                   ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+    pending = [(tree, 0)]
+    deepest = 0
+    while pending:
+        node, depth = pending.pop()
+        depth += isinstance(node, scope_nodes)
+        deepest = max(deepest, depth)
+        pending.extend((child, depth) for child in ast.iter_child_nodes(node))
+    return deepest
 
-    return walk(tree, 0)
 
-
-# --- Regex-based fallback for non-Python languages -------------------
-
-# NOTE on PPL relevance: a regex tokenizer can't understand nesting, so
-# "max_scope_depth" is deliberately left as None for these languages
-# rather than guessed at with brace-counting, which would misrepresent
-# scope semantics (e.g. a JS block `{ }` isn't always a new *function*
-# scope the way a Python `def` always is). Presenting an honest `None`
-# is safer, pedagogically, than a confidently wrong number.
-
-_JS_FUNCTION_PATTERN = re.compile(
-    r"function\s+([A-Za-z_$][\w$]*)\s*\(|"          # function foo(...)
-    r"([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>|"  # foo = (...) =>
-    r"const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>"  # const foo = (...) =>
+# A single left-to-right scan prevents // inside "https://..." from eating
+# real code. Template literals are masked as a whole: ${...} is not analyzed.
+_MASK = re.compile(r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|`(?:\\.|[^`\\])*`')
+_SURFACE_TOKEN = re.compile(r'[A-Za-z_$][\w$]*|\d+(?:\.\d+)?|===|!==|=>|==|!=|<=|>=|\+\+|--|&&|\|\||[^\s]')
+_JS_FUNCTION = re.compile(
+    r'\bfunction\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{'
+    r'|\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*\{'
 )
-_JS_VARIABLE_PATTERN = re.compile(r"\b(?:let|const|var)\s+([A-Za-z_$][\w$]*)")
-_JS_LOOP_PATTERN = re.compile(r"\b(?:for|while)\s*\(")
-_JS_TRY_PATTERN = re.compile(r"\btry\s*\{")
-
-_CPP_FUNCTION_PATTERN = re.compile(
-    r"\b(?:[A-Za-z_]\w*[\s\*&]+)+([A-Za-z_]\w*)\s*\([^;{]*\)\s*\{"
-)
-_CPP_VARIABLE_PATTERN = re.compile(
-    r"\b(?:int|float|double|char|bool|long|short|auto|std::string|string)\s+([A-Za-z_]\w*)\s*[=;,)]"
-)
-_CPP_LOOP_PATTERN = re.compile(r"\b(?:for|while)\s*\(")
-_CPP_TRY_PATTERN = re.compile(r"\btry\s*\{")
-
-_CPP_RESERVED_WORDS = {
-    "if", "for", "while", "switch", "return", "sizeof", "catch",
-}
+_CPP_FUNCTION = re.compile(r'\b(?:[A-Za-z_]\w*[\s*&:<>]+)+([A-Za-z_]\w*)\s*\([^;{}]*\)\s*\{')
+_RESERVED = {"if", "for", "while", "switch", "catch", "return", "sizeof"}
 
 
-def _analyze_regex_fallback(code_string: str, result: dict, language: str) -> dict:
-    """Populate `result` using regex-based surface tokenization.
-
-    This is intentionally a weaker technique than a real AST parse
-    (see module docstring). It is a reasonable approximation for
-    demo/teaching purposes but will miscount in edge cases (e.g.
-    a variable name appearing inside a string literal or comment).
+def _strip_comments_and_strings(source: str) -> str:
+    """Mask comments and quoted literals while preserving token positions.
 
     Args:
-        code_string: Source code in a non-Python language.
-        result: The partially-filled result dict to populate in place.
-        language: The normalized language string, used to select the
-            token patterns ("javascript" vs. everything else -> "cpp"
-            style patterns as a generic C-family default).
-
+        source: JavaScript or C++ source.
     Returns:
-        The same `result` dict, now populated with best-effort metrics.
+        Equal-length text with spaces replacing comments/literals except newlines.
     """
-    result["parse_method"] = "regex"
+    return _MASK.sub(lambda match: re.sub(r'[^\n]', ' ', match.group()), source)
 
-    # Strip comments and string literal contents first so keywords that
-    # appear inside them (e.g. a docstring mentioning "for") don't get
-    # miscounted as real syntax. This is a coarse strip, not a real
-    # lexer, so it still isn't perfectly reliable.
-    cleaned = _strip_comments_and_strings(code_string)
 
-    if language == "javascript":
-        function_pattern = _JS_FUNCTION_PATTERN
-        variable_pattern = _JS_VARIABLE_PATTERN
-        loop_pattern = _JS_LOOP_PATTERN
-        try_pattern = _JS_TRY_PATTERN
-    else:
-        # C++ and any other/unrecognized language fall back to
-        # generic C-family patterns.
-        function_pattern = _CPP_FUNCTION_PATTERN
-        variable_pattern = _CPP_VARIABLE_PATTERN
-        loop_pattern = _CPP_LOOP_PATTERN
-        try_pattern = _CPP_TRY_PATTERN
+def _analyze_surface(source: str, result: dict) -> dict:
+    """Estimate C-family constructs without claiming full grammar validation.
 
-    function_names = []
-    for match in function_pattern.finditer(cleaned):
-        name = next((g for g in match.groups() if g), None)
-        if name and name not in _CPP_RESERVED_WORDS:
-            function_names.append(name)
-
-    result["function_names"] = function_names
-    result["function_count"] = len(function_names)
-    result["recursive_functions"] = _regex_find_recursive(cleaned, function_names)
-
-    variable_names = [m.group(1) for m in variable_pattern.finditer(cleaned)]
-    result["variable_names"] = variable_names
-    result["variable_count"] = len(variable_names)
-
-    result["loop_count"] = len(loop_pattern.findall(cleaned))
-    result["uses_exception_handling"] = bool(try_pattern.search(cleaned))
-    # max_scope_depth intentionally left None -- see note above.
-
+    Args:
+        source: JavaScript or C++ text.
+        result: Fresh result to populate.
+    Returns:
+        Approximate metrics with explicit warnings and unknown scope depth.
+    """
+    cleaned = _strip_comments_and_strings(source)
+    matches = list(_SURFACE_TOKEN.finditer(cleaned))
+    result["token_count"] = len(matches)
+    for match in matches[:60]:
+        line = cleaned.count("\n", 0, match.start()) + 1
+        column = match.start() - cleaned.rfind("\n", 0, match.start())
+        result["token_preview"].append({"kind": "SURFACE", "text": match.group(),
+                                        "line": line, "column": column})
+    javascript = result["language"] == "javascript"
+    pattern = _JS_FUNCTION if javascript else _CPP_FUNCTION
+    structures = []
+    for match in pattern.finditer(cleaned):
+        name = next(group for group in match.groups() if group)
+        if name in _RESERVED:
+            continue
+        result["function_names"].append(name)
+        # Match the definition's own brace-delimited body; an invocation in
+        # main() or at top level must not make a helper appear recursive.
+        start = match.end()
+        depth = 1
+        end = start
+        while end < len(cleaned) and depth:
+            depth += (cleaned[end] == "{") - (cleaned[end] == "}")
+            end += 1
+        body = cleaned[start:end - 1] if depth == 0 else ""
+        if re.search(rf'(?<![\w$]){re.escape(name)}\s*\(', body):
+            result["recursive_functions"].append(name)
+        structures.append(f"Function candidate: {name}")
+    variable_pattern = (r'\b(?:let|const|var)\s+([A-Za-z_$][\w$]*)' if javascript else
+                        r'\b(?:int|float|double|char|bool|long|short|auto|std::string|string)\s+[&*]?\s*([A-Za-z_]\w*)\s*(?=[=;,)]|\{)')
+    result["variable_names"] = sorted(set(re.findall(variable_pattern, cleaned)))
+    result["variable_count"] = len(result["variable_names"])
+    result["function_count"] = len(result["function_names"])
+    result["loop_count"] = len(re.findall(r'\b(?:for|while)\s*\(', cleaned))
+    result["branch_count"] = len(re.findall(r'\b(?:if|switch)\s*\(', cleaned))
+    result["uses_exception_handling"] = bool(re.search(r'\btry\s*\{', cleaned))
+    result["structure_preview"] = "\n".join(structures) or "No supported function patterns found."
+    result["warnings"] = [
+        "Approximate surface analysis, not an AST. Run invokes the real language toolchain for syntax/type diagnostics.",
+        "Comments and quoted literals are masked; token count excludes them. JS regex literals, template interpolation, C++ raw strings/macros and complex declarations are not parsed.",
+        "Only named brace-bodied functions are detected. Recursion is a body-local name-match heuristic; nested scopes, aliases and overloads are not resolved.",
+        "Variable counts cover simple declarations; scope depth is unknown. Cross-language counts use different analysis methods.",
+    ]
     return result
-
-
-def _regex_find_recursive(cleaned_code: str, function_names) -> list:
-    """Best-effort recursion detection for regex-tokenized languages.
-
-    A function is flagged as recursive if its own name appears as a
-    call (`name(`) anywhere after its first definition. This is a
-    coarse heuristic -- it does not confirm the call is actually
-    inside that function's body -- but is adequate for short demo
-    snippets typical of a classroom presentation.
-
-    Args:
-        cleaned_code: Source with comments/strings stripped.
-        function_names: Names already identified as function definitions.
-
-    Returns:
-        List of function names that appear to call themselves.
-    """
-    recursive = []
-    for name in function_names:
-        call_pattern = re.compile(rf"\b{re.escape(name)}\s*\(")
-        if len(call_pattern.findall(cleaned_code)) > 1:  # 1 = the def itself
-            recursive.append(name)
-    return recursive
-
-
-def _strip_comments_and_strings(code_string: str) -> str:
-    """Coarsely remove // and /* */ comments and quoted string contents.
-
-    Args:
-        code_string: Raw source code.
-
-    Returns:
-        Source code with comments blanked out and string literal
-        contents replaced by empty quotes, reducing false keyword
-        matches inside them. This is a regex-based approximation, not
-        a real lexer, and can be fooled by unusual edge cases (e.g.
-        escaped quotes) -- acceptable for demo-scale snippets.
-    """
-    no_block_comments = re.sub(r"/\*.*?\*/", "", code_string, flags=re.DOTALL)
-    no_line_comments = re.sub(r"//.*", "", no_block_comments)
-    no_strings = re.sub(r'"(?:[^"\\]|\\.)*"', '""', no_line_comments)
-    no_strings = re.sub(r"'(?:[^'\\]|\\.)*'", "''", no_strings)
-    return no_strings
