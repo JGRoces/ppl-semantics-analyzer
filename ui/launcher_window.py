@@ -10,39 +10,39 @@ from core.examples import LANGUAGE_LABELS
 from ui.ui_assets import UIAssets
 
 
-class LauncherWindow(ctk.CTk):
+class LauncherWindow(ctk.CTkFrame):
     """Select a comparison pair before entering the diagnostics workspace."""
 
     LANGUAGE_OPTIONS = list(LANGUAGE_LABELS)
 
-    def __init__(self) -> None:
-        """Create the split welcome screen with native window controls.
+    def __init__(self, master, on_start, on_cancel) -> None:
+        """Create the welcome page inside the application's persistent window.
 
         Args:
-            None.
+            master: Persistent application root.
+            on_start: Callback receiving the selected language pair and theme.
+            on_cancel: Callback closing the application.
         Returns:
             None.
         """
-        super().__init__()
-        UIAssets.apply_theme()
+        super().__init__(
+            master,
+            fg_color=UIAssets.COLORS["BG_PRIMARY"],
+            corner_radius=UIAssets.SHELL_RADIUS,
+        )
+        self.on_start = on_start
+        self.on_cancel = on_cancel
         self.result = "cancelled"
         self.selected_languages = ("Python", "JavaScript")
         self.dark_mode = False
-        self.title("Paradigm Diagnostics — Get started")
-        UIAssets.center_window(
-            self,
-            min(1140, self.winfo_screenwidth() - 40),
-            min(760, self.winfo_screenheight() - 80),
-        )
-        self.minsize(1000, 680)
-        self.configure(fg_color=UIAssets.COLORS["BG_PRIMARY"])
         self.grid_columnconfigure(0, weight=3, uniform="split")
         self.grid_columnconfigure(1, weight=2, uniform="split")
         self.grid_rowconfigure(0, weight=1)
         self._build_brand()
         self._build_setup()
-        self.protocol("WM_DELETE_WINDOW", self._on_cancel)
-        self.bind("<Return>", lambda event: self._on_start())
+        self.return_binding = master.bind(
+            "<Return>", lambda event: self._on_start(), add="+"
+        )
 
     def _build_brand(self) -> None:
         """Present the brand and a code example in the reference's left panel.
@@ -240,9 +240,11 @@ class LauncherWindow(ctk.CTk):
         for button, pair in self.pair_buttons:
             button.configure(
                 fg_color=UIAssets.COLORS[
-                    "TINT_BLUE" if pair == selected else "SURFACE"
+                    "TINT_ACCENT" if pair == selected else "SURFACE"
                 ],
-                border_color=UIAssets.COLORS["BLUE" if pair == selected else "BORDER"],
+                border_color=UIAssets.COLORS[
+                    "ACCENT" if pair == selected else "BORDER"
+                ],
             )
 
     def _on_toggle_appearance(self) -> None:
@@ -256,7 +258,7 @@ class LauncherWindow(ctk.CTk):
         UIAssets.set_dark_mode(self.appearance_switch_var.get() == "dark")
 
     def get_selected_languages(self) -> tuple:
-        """Return saved language labels after the launcher closes.
+        """Return the language labels saved during entry.
 
         Args:
             None.
@@ -266,7 +268,7 @@ class LauncherWindow(ctk.CTk):
         return self.selected_languages
 
     def _on_start(self) -> None:
-        """Save settings and hand off to the existing dashboard entry point.
+        """Pass settings to the persistent application window.
 
         Args:
             None.
@@ -278,8 +280,11 @@ class LauncherWindow(ctk.CTk):
             self.language_b_combo.get(),
         )
         self.dark_mode = self.appearance_switch_var.get() == "dark"
+        if self.result == "start":
+            return
         self.result = "start"
-        self.destroy()
+        self.master.unbind("<Return>", self.return_binding)
+        self.on_start(self.selected_languages, self.dark_mode)
 
     def _on_cancel(self) -> None:
         """Close without opening a dashboard.
@@ -290,4 +295,4 @@ class LauncherWindow(ctk.CTk):
             None.
         """
         self.result = "cancelled"
-        self.destroy()
+        self.on_cancel()

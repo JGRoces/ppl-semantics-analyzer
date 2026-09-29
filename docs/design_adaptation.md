@@ -7,9 +7,9 @@ The user selected five files from their previous Java project as design inspirat
 | Selected reference | Python adaptation |
 | :--- | :--- |
 | `UIAssets.java` | Light/dark palette, typography hierarchy, four accent colors, subtle borders, and shared style factories in `ui/ui_assets.py` |
-| `LoginGUI.java` | Split branding/setup launcher, large welcome heading, four-color brand mark, primary/secondary actions |
+| `LoginGUI.java` | Split branding/setup launcher, large welcome heading, four-shade green brand mark, primary/secondary actions |
 | `SignUpChoiceGUI.java` | Comparison-pair choices in the launcher and actionable demonstration cards in the dashboard |
-| `AdminDashboardGUI.java` | Group identity in the top bar, collapsible sidebar, active blue navigation, persistent content pages |
+| `AdminDashboardGUI.java` | Product title and subtitle in the top bar, collapsible sidebar, active green navigation, persistent content pages |
 | `Main.java` | Native UI event-loop discipline; Python's main thread owns Tk while a worker handles comparisons |
 
 The actual Java dashboard calls `getSurface()` for its sidebar and top bar, even though some comments and unused chrome constants suggest an always-dark surface. The adaptation follows that actual theme-aware behavior: a white shell in light mode and near-black surfaces in dark mode.
@@ -36,6 +36,12 @@ The car photograph and account roles are replaced with programming-specific cont
 
 ## Verification
 
-The native smoke test covers launcher preset selection and theme handoff, all four pages, blue active navigation, source preservation, collapse/expand behavior, library actions, report freshness, and essential control bounds at the supported minimum window size. Existing checks still exercise line numbers, both scroll directions, source editing, execution, errors, cancellation, file opening, and export.
+The native smoke test covers launcher preset selection and theme handoff, all four pages, green active navigation, source preservation, collapse/expand behavior, library actions, report freshness, and essential control bounds at the supported minimum window size. Existing checks still exercise line numbers, both scroll directions, source editing, execution, errors, cancellation, file opening, and export.
 
 The backend is independent of the redesigned UI and retains the same comparison/execution contracts. Desktop screenshot review remains unavailable unless Computer Use permission is enabled; native layout and callback checks provide functional evidence, not a claim of pixel-by-pixel visual inspection.
+
+## Entry transition refinement
+
+The entry and workspace are child frames of `Application`, which owns one native Tk window. Opening the workspace swaps content without destroying, withdrawing, recentering, or recreating that window. Language and appearance choices are passed directly to the new page. Native tests verify window identity, visibility, and unchanged geometry through the transition.
+
+The latest visual refinement changes accent colors to terminal greens and enlarges the product title/subtitle after removing the G4 badge. Existing shapes, cards, navigation, and editor components retain their design.

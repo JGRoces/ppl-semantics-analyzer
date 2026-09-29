@@ -1,7 +1,7 @@
 """Shared visual tokens adapted from the team's Java Car Rental UIAssets.
 
 The Python implementation keeps the reference's neutral page/surface hierarchy,
-blue navigation, four accent colors, typography scale, and restrained rounding.
+green navigation, terminal-green entry accents, typography scale, and restrained rounding.
 CustomTkinter resolves (light, dark) pairs instead of Java theme listeners.
 """
 
@@ -25,14 +25,18 @@ class UIAssets:
         "TEXT_MUTED": ("#6B6B6B", "#A0A0A0"),
         "TEXT_PLACEHOLDER": ("#969696", "#696969"),
         "TEXT_ON_ACCENT": "#FFFFFF",
-        "BLUE": "#2563EB",
-        "BLUE_PRESSED": "#1D4ED8",
+        "ACCENT": "#15803D",
+        "ACCENT_PRESSED": "#166534",
         "GREEN": "#16A34A",
+        "BRAND_GREEN_1": "#166534",
+        "BRAND_GREEN_2": "#15803D",
+        "BRAND_GREEN_3": "#22C55E",
+        "BRAND_GREEN_4": "#86EFAC",
         "GREEN_PRESSED": "#15803D",
         "YELLOW": "#EAB308",
         "RED": "#DC2626",
         "RED_PRESSED": "#B91C1C",
-        "TINT_BLUE": ("#DBEAFE", "#142443"),
+        "TINT_ACCENT": ("#DCFCE7", "#12301E"),
         "TINT_GREEN": ("#DCFCE7", "#122C1D"),
         "TINT_YELLOW": ("#FEF9C3", "#302A10"),
         "TINT_RED": ("#FEE2E2", "#351717"),
@@ -42,7 +46,7 @@ class UIAssets:
         "CHROME_BORDER": "#262626",
         "CHROME_TEXT": "#F0F0F0",
         "CHROME_MUTED": "#A0A0A0",
-        "CODE_KEYWORD": "#93C5FD",
+        "CODE_KEYWORD": "#4ADE80",
         "CODE_VALUE": "#86EFAC",
     }
     FONTS = {
@@ -66,7 +70,7 @@ class UIAssets:
     BORDER_WIDTH = 1
     SIDEBAR_WIDTH = 208
     SIDEBAR_COLLAPSED = 68
-    DEBUG_PALETTE = ["TINT_BLUE", "TINT_GREEN", "TINT_YELLOW", "TINT_RED"]
+    DEBUG_PALETTE = ["TINT_ACCENT", "TINT_GREEN", "TINT_YELLOW", "TINT_RED"]
 
     @classmethod
     def apply_theme(cls) -> None:
@@ -78,7 +82,7 @@ class UIAssets:
             None; callers may immediately restore a user's chosen mode.
         """
         ctk.set_appearance_mode("Light")
-        ctk.set_default_color_theme("blue")
+        ctk.set_default_color_theme("green")
 
     @classmethod
     def set_dark_mode(cls, enabled: bool) -> None:
@@ -134,11 +138,11 @@ class UIAssets:
             ValueError: An unknown variant was requested.
         """
         variants = {
-            "primary": ("BLUE", "BLUE_PRESSED", "TEXT_ON_ACCENT"),
+            "primary": ("ACCENT", "ACCENT_PRESSED", "TEXT_ON_ACCENT"),
             "success": ("GREEN", "GREEN_PRESSED", "TEXT_ON_ACCENT"),
             "danger": ("TINT_RED", "TINT_RED", "RED"),
             "secondary": ("SURFACE", "TINT_NEUTRAL_A", "TEXT_PRIMARY"),
-            "quiet": ("SURFACE", "TINT_BLUE", "TEXT_MUTED"),
+            "quiet": ("SURFACE", "TINT_ACCENT", "TEXT_MUTED"),
         }
         if variant not in variants:
             raise ValueError(f"Unknown button variant: {variant}")
@@ -187,14 +191,14 @@ class UIAssets:
             "button_hover_color": cls.COLORS["TINT_NEUTRAL_B"],
             "dropdown_fg_color": cls.COLORS["SURFACE"],
             "dropdown_text_color": cls.COLORS["TEXT_PRIMARY"],
-            "dropdown_hover_color": cls.COLORS["TINT_BLUE"],
+            "dropdown_hover_color": cls.COLORS["TINT_ACCENT"],
             "text_color": cls.COLORS["TEXT_PRIMARY"],
             "font": cls.FONTS["BODY"],
         }
 
     @classmethod
     def switch_kwargs(cls) -> dict:
-        """Style the appearance switch with the shared blue accent.
+        """Style the appearance switch with the shared green accent.
 
         Args:
             None.
@@ -204,7 +208,7 @@ class UIAssets:
         return {
             "corner_radius": cls.CORNER_RADIUS,
             "fg_color": cls.COLORS["TINT_NEUTRAL_B"],
-            "progress_color": cls.COLORS["BLUE"],
+            "progress_color": cls.COLORS["ACCENT"],
             "button_color": cls.COLORS["WHITE"],
             "button_hover_color": cls.COLORS["TINT_NEUTRAL_A"],
             "text_color": cls.COLORS["TEXT_PRIMARY"],
@@ -229,7 +233,7 @@ class UIAssets:
 
     @classmethod
     def accent_bar(cls, parent):
-        """Build the reference project's four-color brand mark.
+        """Build the four shades of green for the terminal-inspired brand mark.
 
         Args:
             parent: Widget containing the mark.
@@ -239,7 +243,9 @@ class UIAssets:
         bar = ctk.CTkFrame(
             parent, fg_color="transparent", corner_radius=cls.SHELL_RADIUS
         )
-        for index, color in enumerate(("BLUE", "GREEN", "YELLOW", "RED")):
+        for index, color in enumerate(
+            ("BRAND_GREEN_1", "BRAND_GREEN_2", "BRAND_GREEN_3", "BRAND_GREEN_4")
+        ):
             ctk.CTkFrame(
                 bar,
                 width=18,

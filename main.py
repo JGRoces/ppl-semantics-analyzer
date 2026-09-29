@@ -1,37 +1,21 @@
-"""
-main.py
+"""Start Paradigm Diagnostics in one persistent native window.
 
-Root entry point for the PPL Semantics Analyzer desktop application.
-
-Flow: show LauncherWindow first (a split welcome and comparison setup
-screen). If the user clicks Start, close the launcher and open
-MainWindow. If they cancel or close the launcher instead, the app
-exits without ever opening the dashboard.
-
-This file stays thin on purpose — it only sequences the two windows.
-The dashboard owns UI wiring; core modules remain usable without a GUI.
+Application owns the only Tk root and event loop. Entry and workspace are child
+pages, so opening the workspace never closes or recreates the native window.
 """
 
-from ui.launcher_window import LauncherWindow
-from ui.main_window import MainWindow
+from ui.application import Application
 
 
 def main() -> None:
-    """Run the launcher, then the main dashboard if the user starts it.
+    """Run the entry page and workspace through one application event loop.
 
     Args:
         None.
-
     Returns:
-        None.
+        None after the user closes the application.
     """
-    launcher = LauncherWindow()
-    launcher.mainloop()
-
-    if launcher.result != "start":
-        return
-
-    app = MainWindow(*launcher.selected_languages, dark_mode=launcher.dark_mode)
+    app = Application()
     app.mainloop()
 
 

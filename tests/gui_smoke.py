@@ -11,8 +11,7 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-from ui.launcher_window import LauncherWindow
-from ui.main_window import MainWindow
+from ui.application import Application
 from ui.ui_assets import UIAssets
 
 
@@ -30,7 +29,7 @@ def check_navigation(app) -> None:
         app.update()
         assert app.pages[page].winfo_ismapped()
         assert app.page_label.cget("text") == app.PAGE_TITLES[page]
-        assert app.nav_buttons[page][0].cget("fg_color") == UIAssets.COLORS["BLUE"]
+        assert app.nav_buttons[page][0].cget("fg_color") == UIAssets.COLORS["ACCENT"]
         assert sum(frame.winfo_ismapped() for frame in app.pages.values()) == 1
     assert [editor.get("1.0", "end-1c") for editor in app.editors] == original
     app._show_page("workspace")
@@ -50,7 +49,7 @@ def check_navigation(app) -> None:
     assert "total" in app.editors[0].get("1.0", "end-1c")
     app._select_lesson("Recursion")
     # Check the supported minimum size without relying on desktop capture.
-    app.geometry("1180x760")
+    app.winfo_toplevel().geometry("1180x760")
     app.update()
     for widget in [
         app.run_button,
@@ -131,7 +130,7 @@ def check_line_numbers(app) -> None:
                 gutter.surface.cget("background")
                 == UIAssets.COLORS["GUTTER_BG"][int(dark)]
             )
-    app.geometry("1180x720")
+    app.winfo_toplevel().geometry("1180x720")
     app.update()
     app._load_lesson()
     app.update()
@@ -164,7 +163,8 @@ def main() -> None:
     Returns:
         None; assertions fail the command when an interaction breaks.
     """
-    launcher = LauncherWindow()
+    window = Application()
+    launcher = window.launcher
     launcher._choose_pair(("Python", "C++"))
     assert launcher.language_b_combo.get() == "C++"
     launcher.update()
@@ -172,11 +172,27 @@ def main() -> None:
         assert panel.winfo_width() > 350
     launcher.language_b_combo.set("C++")
     launcher.appearance_switch_var.set("light")
-    launcher.after(200, launcher._on_start)
-    launcher.mainloop()
+    window.update()
+    native_window = window.winfo_id()
+    original_geometry = window.geometry()
+    unmapped = []
+    window.bind(
+        "<Unmap>",
+        lambda event: unmapped.append(event.widget) if event.widget == window else None,
+    )
+    launcher._on_start()
+    window.update()
     assert launcher.selected_languages == ("Python", "C++")
     assert launcher.dark_mode is False
-    app = MainWindow(*launcher.selected_languages, dark_mode=launcher.dark_mode)
+    assert window.winfo_id() == native_window
+    assert window.geometry() == original_geometry
+    assert window.winfo_ismapped()
+    assert unmapped == [], "The native window must not disappear during entry"
+    app = window.workspace
+    assert app.winfo_toplevel() is window
+    assert not launcher.winfo_exists()
+    assert app.brand_title.cget("font") == UIAssets.FONTS["H1"]
+    assert app.brand_subtitle.cget("font") == UIAssets.FONTS["BODY"]
     try:
         app.update()
         assert not app.appearance_switch.get()
@@ -233,7 +249,7 @@ def main() -> None:
         app._toggle_appearance()
         app.update()
         print(
-            "PASS: line numbers, editing, vertical/horizontal scroll, theme, launcher, run, views, export, errors, stop, recovery"
+            "PASS: same-window entry, header, navigation, line numbers, theme, run, views, export, errors, stop, recovery"
         )
     finally:
         app._close()

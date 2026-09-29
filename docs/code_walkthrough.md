@@ -4,9 +4,11 @@ This guide explains the major code blocks and decisions so each team member can 
 
 ## 1. Entry point and launcher
 
-`main.py:main()` creates the launcher and runs its event loop. Cancel leaves the result as `cancelled`, so the function returns. Start saves the language selections and appearance in ordinary Python attributes **before** destroying the launcher's Tk widgets. The dashboard then receives those saved values. Reading a destroyed combo box would be invalid, which is why the saved values matter.
+`main.py:main()` creates one `Application` root and runs one event loop. `ui/application.py` mounts the welcome page inside that window. When Open workspace is clicked, `LauncherWindow._on_start()` reads the language and theme choices and calls `Application.open_workspace()`. That method builds the workspace as another child frame, raises it in the same grid cell, and destroys only the old entry widgets. The native window, geometry, and event loop remain intact. Cancel closes the root; closing during diagnostics invokes the workspace's process-cleanup path.
 
-`LauncherWindow` builds a split branding/setup screen inspired by the Java LoginGUI. `_choose_pair()` fills both language selectors from a preset card; `_sync_pair()` highlights the card matching the current choices. Its two menus restrict input to supported language labels. `_on_toggle_appearance()` changes the shared theme. `_on_start()` saves settings and closes; `_on_cancel()` closes without launching the dashboard. `get_selected_languages()` returns the saved selections.
+`LauncherWindow` and `MainWindow` are now `CTkFrame` pages, not separate roots. Return on the entry page is unbound during the transition, and the workspace installs its Ctrl/⌘ + Enter shortcut on the persistent root. The selected theme is applied without resetting the root to light mode.
+
+`LauncherWindow` builds a split branding/setup screen inspired by the Java LoginGUI. `_choose_pair()` fills both language selectors from a preset card; `_sync_pair()` highlights the card matching the current choices. Its two menus restrict input to supported language labels. `_on_toggle_appearance()` changes the shared theme. `_on_start()` passes settings to the root controller; `_on_cancel()` closes without launching the dashboard. `get_selected_languages()` returns the saved selections.
 
 ## 2. Static analysis: `core/ast_analyzer.py`
 
@@ -140,8 +142,12 @@ The gutter grows to fit three- or four-digit line numbers and shrinks when lines
 
 ## 8. Design tokens and verification
 
-`UIAssets` centralizes colors, fonts, subtle borders, and rounded card/button radii, adapting the Java UIAssets design. The `accent_bar()` factory, which builds the four-color mark. Its style factories return argument dictionaries used by widget constructors; appearance-aware color pairs select the light or dark value. The new gutter adds one background token and reuses the editor font and muted text color.
+`UIAssets` centralizes colors, fonts, subtle borders, and rounded card/button radii, adapting the Java UIAssets design. The `accent_bar()` factory builds a mark using four shades of green. Its style factories return argument dictionaries used by widget constructors; appearance-aware color pairs select the light or dark value. The new gutter adds one background token and reuses the editor font and muted text color.
 
 `core.self_check:main()` runs a real factorial snippet in each language and checks for 120. Locating an executable alone would not prove a compiler can build a program.
 
 `tests/test_cases.py` covers normal examples, invalid inputs, structural regressions, tool failures, timeouts, cancellation, output limits, static-only behavior, and report content. `tests/gui_smoke.py` opens real native windows to exercise integration, including line-number alignment, scrolling, edits, theme changes, file loading, execution, error recovery, and export.
+
+## 9. Green accents and header identity
+
+`ACCENT`, `ACCENT_PRESSED`, and `TINT_ACCENT` are semantic theme keys used for primary actions, selected navigation, and selection cards. Their values are green; named `BRAND_GREEN_1` through `BRAND_GREEN_4` color the existing entry mark without changing its shape. The code preview uses green keyword/value tokens. Existing warning/error colors retain their meanings. The header removes the G4 badge and uses the H1 and BODY typography tokens for the product title and subtitle.

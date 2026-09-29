@@ -155,14 +155,14 @@ This adapts the professor's suggested pipeline: **Source → lexical/structural 
 
 | Module | Responsibility and main logic |
 | :--- | :--- |
-| `main.py` | Run launcher; if Start was selected, pass saved language/theme values into the dashboard |
+| `main.py` / `ui/application.py` | Own one native window and event loop; swap entry/workspace child pages while preserving geometry |
 | `core/ast_analyzer.py` | Fresh result dictionaries; Python tokenizer/AST walk; explicit pattern limitations for JS/C++ |
 | `core/execution_runner.py` | Validate request; create temporary directory; choose tool; compile C++ if needed; poll child; collect bounded text |
 | `core/examples.py` | Lesson text, source variants, default stdin, expected outputs/statuses used by tests |
 | `core/comparison.py` | Orchestrate two analyses/runs; compare only successful stdout; render three views and Markdown |
 | `core/self_check.py` | Run real factorial programs to verify that located tools work |
 | `ui/main_window.py` | Build panels; snapshot input; start worker; render reports; invalidate stale results; open/export files |
-| `ui/launcher_window.py` | Save language and appearance values before its widgets are destroyed |
+| `ui/launcher_window.py` | Pass language and appearance values to the persistent application root |
 | `ui/ui_assets.py` | Central color, typography, card radii, and widget helpers |
 
 ### Analysis definitions

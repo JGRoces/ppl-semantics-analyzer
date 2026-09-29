@@ -106,6 +106,7 @@ Per academic integrity policy, log any AI-assisted work here (or in a shared doc
 | 2026-09-29 | Codex | Add IDE-style line numbers to Editor A and B | Independent, scroll-aligned canvas gutters | Used shared theme tokens and native line geometry; added GUI checks | Make source lines easier to reference during demonstrations |
 | 2026-09-29 | Codex | Complete the requested code explanations and presentation preparation | Function-level walkthrough and rehearsal guide | Documented actual implementation behavior, limitations, and verified demo paths | Help the team explain and rehearse the application |
 | 2026-09-29 | Codex | Adapt the selected Java Car Rental UI designs to Python | Split launcher, shared palette, collapsible shell, lesson/report/guide pages | Kept the backend and gutters; retained native window controls; extended native GUI checks | Match the user's chosen visual direction without losing the working demo |
+| 2026-09-29 | Codex | Use green accents, remove G4 badge, and make entry seamless | Green color tokens, larger header identity, and a persistent application root | Converted entry/workspace to child frames and checked native window identity and geometry | Preserve the chosen design while removing the close/reopen transition |
 
 ---
 
@@ -115,7 +116,7 @@ Per academic integrity policy, log any AI-assisted work here (or in a shared doc
 
 | Module/File | Owner | Status |
 | :--- | :--- | :--- |
-| `main.py` (launcher → dashboard) | *(assign)* | Implemented |
+| `main.py` / `ui/application.py` (persistent window) | *(assign)* | Implemented |
 | `ui/ui_assets.py` (shared theme and styles) | *(assign)* | Implemented |
 | `ui/launcher_window.py` (split welcome/setup screen) | *(assign)* | Implemented |
 | `ui/main_window.py` (shell, navigation, workspace, lessons, reports, guide) | *(assign)* | Implemented |

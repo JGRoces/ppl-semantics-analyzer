@@ -71,6 +71,7 @@ core/
   comparison.py              Comparison pipeline, language profiles, report text
   self_check.py              Actual runtime/compiler readiness check
 ui/
+  application.py             One persistent native window and page transition
   launcher_window.py         Split welcome screen and comparison choice cards
   main_window.py             Dashboard pages, workspace, and worker lifecycle
   ui_assets.py               Shared design tokens and widget style helpers
@@ -105,7 +106,7 @@ Optional Markdown or JSON report export
 
 ## Design philosophy
 
-The UI takes inspiration from the team's Java Car Rental project: a split welcome screen, four-color brand mark, neutral top bar/sidebar, blue active navigation, and rounded cards. The user-approved redesign replaces the earlier fixed 10×10 grid and sharp-corner rule.
+The UI takes inspiration from the team's Java Car Rental project: a split welcome screen, four-shade green brand mark, neutral top bar/sidebar, green active navigation, and rounded cards. The user-approved redesign replaces the earlier fixed 10×10 grid and sharp-corner rule.
 
 - Light mode: gray page background, white cards, muted labels, subtle dividers.
 - Dark mode: black page background and near-black surfaces with readable text.
@@ -115,6 +116,7 @@ The UI takes inspiration from the team's Java Car Rental project: a split welcom
 - **Presentation guide** provides a short demo sequence and honest analysis limitations.
 - Collapsing the sidebar gives the editors more room without reloading source.
 - All fonts, colors, and radii remain centralized in `ui/ui_assets.py`.
+- One persistent native window hosts both entry and workspace: opening diagnostics preserves position and size without closing/reopening.
 - Native window controls preserve macOS resizing and focus behavior.
 
 See [Design adaptation](docs/design_adaptation.md) for reference-to-Python mappings and implementation decisions.

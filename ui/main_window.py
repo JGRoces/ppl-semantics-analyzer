@@ -20,7 +20,7 @@ from ui.line_numbers import LineNumberGutter
 from ui.ui_assets import UIAssets
 
 
-class MainWindow(ctk.CTk):
+class MainWindow(ctk.CTkFrame):
     """Present a comparison workbench, lesson library, reports, and guide."""
 
     HEADER_TABS = ["Static AST", "Runtime", "PPL Verdict"]
@@ -33,6 +33,7 @@ class MainWindow(ctk.CTk):
 
     def __init__(
         self,
+        master,
         language_a: str = "Python",
         language_b: str = "JavaScript",
         dark_mode: bool = False,
@@ -40,23 +41,18 @@ class MainWindow(ctk.CTk):
         """Create the themed shell and load the initial recursion lesson.
 
         Args:
+            master: The existing application window; no second Tk root is created.
             language_a: First language selected in the launcher.
             language_b: Second language selected in the launcher.
             dark_mode: Appearance carried over from the launcher.
         Returns:
             None.
         """
-        super().__init__()
-        UIAssets.apply_theme()
-        UIAssets.set_dark_mode(dark_mode)
-        self.title("Paradigm Diagnostics — Group 4")
-        UIAssets.center_window(
-            self,
-            min(1460, self.winfo_screenwidth() - 40),
-            min(940, self.winfo_screenheight() - 80),
+        super().__init__(
+            master,
+            fg_color=UIAssets.COLORS["BG_PRIMARY"],
+            corner_radius=UIAssets.SHELL_RADIUS,
         )
-        self.minsize(1180, 760)
-        self.configure(fg_color=UIAssets.COLORS["BG_PRIMARY"])
         self.report = None
         self.busy = False
         self.active_view = "Static AST"
@@ -94,9 +90,8 @@ class MainWindow(ctk.CTk):
         self.status_label.grid(
             row=2, column=0, columnspan=2, sticky="ew", padx=20, pady=(0, 8)
         )
-        self.protocol("WM_DELETE_WINDOW", self._close)
-        self.bind("<Control-Return>", lambda event: self._start(True))
-        self.bind("<Command-Return>", lambda event: self._start(True))
+        master.bind("<Control-Return>", lambda event: self._start(True))
+        master.bind("<Command-Return>", lambda event: self._start(True))
         self._load_lesson()
         self._show_page("workspace")
 
@@ -116,27 +111,19 @@ class MainWindow(ctk.CTk):
         )
         header.grid(row=0, column=0, columnspan=2, sticky="ew")
         header.grid_columnconfigure(2, weight=1)
-        ctk.CTkLabel(
-            header,
-            text="G4",
-            width=38,
-            height=38,
-            corner_radius=UIAssets.CARD_RADIUS,
-            fg_color=UIAssets.COLORS["TINT_YELLOW"],
-            text_color=UIAssets.COLORS["TEXT_PRIMARY"],
-            font=UIAssets.FONTS["H3"],
-        ).grid(row=0, column=0, padx=(22, 12), pady=14)
         identity = ctk.CTkFrame(header, fg_color="transparent")
-        identity.grid(row=0, column=1, sticky="w")
-        ctk.CTkLabel(
-            identity, text="Paradigm Diagnostics", **UIAssets.label_kwargs("h3")
-        ).pack(anchor="w")
-        ctk.CTkLabel(
+        identity.grid(row=0, column=0, columnspan=2, sticky="w", padx=22, pady=12)
+        self.brand_title = ctk.CTkLabel(
+            identity, text="Paradigm Diagnostics", **UIAssets.label_kwargs("h1")
+        )
+        self.brand_title.pack(anchor="w")
+        self.brand_subtitle = ctk.CTkLabel(
             identity,
             text="Principles of Programming Languages",
-            font=UIAssets.FONTS["LABEL"],
+            font=UIAssets.FONTS["BODY"],
             text_color=UIAssets.COLORS["TEXT_MUTED"],
-        ).pack(anchor="w")
+        )
+        self.brand_subtitle.pack(anchor="w")
         self.page_label = ctk.CTkLabel(
             header, text="Workspace", **UIAssets.label_kwargs("h2")
         )
@@ -172,7 +159,7 @@ class MainWindow(ctk.CTk):
         UIAssets.set_dark_mode(bool(self.appearance_switch.get()))
 
     def _build_sidebar(self) -> None:
-        """Create persistent, collapsible navigation with active blue states.
+        """Create persistent, collapsible navigation with active green states.
 
         Args:
             None.
@@ -296,8 +283,10 @@ class MainWindow(ctk.CTk):
         for key, (button, _) in self.nav_buttons.items():
             active = key == page
             button.configure(
-                fg_color=UIAssets.COLORS["BLUE" if active else "SURFACE"],
-                hover_color=UIAssets.COLORS["BLUE_PRESSED" if active else "TINT_BLUE"],
+                fg_color=UIAssets.COLORS["ACCENT" if active else "SURFACE"],
+                hover_color=UIAssets.COLORS[
+                    "ACCENT_PRESSED" if active else "TINT_ACCENT"
+                ],
                 text_color=UIAssets.COLORS[
                     "TEXT_ON_ACCENT" if active else "TEXT_MUTED"
                 ],
@@ -548,7 +537,7 @@ class MainWindow(ctk.CTk):
             header, text="Results & insights", **UIAssets.label_kwargs("h2")
         ).grid(row=0, column=0, sticky="w")
         # Separate buttons allow white selected text and dark inactive text in
-        # light mode; a single shared text color would lose contrast on blue.
+        # light mode; a single shared text color would lose contrast on the selected accent.
         self.tab_strip = ctk.CTkFrame(header, fg_color="transparent")
         self.tab_strip.grid(row=0, column=1)
         self.view_buttons = {}
@@ -604,7 +593,7 @@ class MainWindow(ctk.CTk):
         for index, (name, lesson) in enumerate(LESSONS.items()):
             card = ctk.CTkFrame(library, **UIAssets.frame_kwargs())
             card.grid(row=index // 2, column=index % 2, sticky="nsew", padx=6, pady=6)
-            color = ("BLUE", "GREEN", "YELLOW", "RED")[index % 4]
+            color = ("ACCENT", "GREEN", "YELLOW", "RED")[index % 4]
             ctk.CTkLabel(
                 card,
                 text=f"{index + 1:02}",
@@ -930,9 +919,9 @@ class MainWindow(ctk.CTk):
         for key, button in self.view_buttons.items():
             active = key == view
             button.configure(
-                fg_color=UIAssets.COLORS["BLUE" if active else "TINT_NEUTRAL_A"],
+                fg_color=UIAssets.COLORS["ACCENT" if active else "TINT_NEUTRAL_A"],
                 hover_color=UIAssets.COLORS[
-                    "BLUE_PRESSED" if active else "TINT_NEUTRAL_B"
+                    "ACCENT_PRESSED" if active else "TINT_NEUTRAL_B"
                 ],
                 text_color=UIAssets.COLORS[
                     "TEXT_ON_ACCENT" if active else "TEXT_PRIMARY"
@@ -1036,4 +1025,4 @@ class MainWindow(ctk.CTk):
         self.cancel_event.set()
         if self.poll_id is not None:
             self.after_cancel(self.poll_id)
-        self.destroy()
+        self.winfo_toplevel().destroy()
