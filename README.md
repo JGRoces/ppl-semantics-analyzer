@@ -123,12 +123,13 @@ The UI takes inspiration from the team's Java Car Rental project: a split welcom
 
 - Light mode: gray page background, white cards, muted labels, subtle dividers.
 - Dark mode: black page background and near-black surfaces with readable text.
-- **Workspace** retains both line-numbered editors, shared input, execution controls, and result tabs.
-- **Demonstrations** presents nine lesson cards that load the selected language pair.
+- **Workspace** contains both line-numbered editors, execution controls, and expanded result tabs. Lessons use their preset standard input; there is no editable input or lesson-notes panel.
+- **Demonstrations** presents nine lesson cards with concept summaries, **Load demonstration**, and **View Lesson**. Replace the placeholder PDFs in `docs/lessons/` using the filenames documented there.
 - **Reports** shows the current source/input snapshot and supports Markdown/JSON export.
-- **Presentation guide** provides a short demo sequence and honest analysis limitations.
+- **Back to Menu** cancels active work and returns to a fresh language selection screen in the same native window.
 - Collapsing the sidebar gives the editors more room without reloading source.
 - All fonts, colors, and radii remain centralized in `ui/ui_assets.py`.
+- The theme follows the Car Rental references: rounded controls, gray page backgrounds and white cards in light mode, black backgrounds and near-black cards in dark mode, and terminal-green navigation and lesson accents. Red remains reserved for Stop/error actions.
 - One persistent native window hosts both entry and workspace: opening diagnostics preserves position and size without closing/reopening.
 - Native window controls preserve macOS resizing and focus behavior.
 

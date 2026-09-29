@@ -1,7 +1,7 @@
 """Shared visual tokens adapted from the team's Java Car Rental UIAssets.
 
 The Python implementation keeps the reference's neutral page/surface hierarchy,
-green navigation, terminal-green entry accents, typography scale, and restrained rounding.
+green navigation, terminal-green entry accents, typography scale, and rounded controls.
 CustomTkinter resolves (light, dark) pairs instead of Java theme listeners.
 """
 
@@ -33,12 +33,12 @@ class UIAssets:
         "BRAND_GREEN_3": "#22C55E",
         "BRAND_GREEN_4": "#86EFAC",
         "GREEN_PRESSED": "#15803D",
-        "YELLOW": "#EAB308",
+        "BLUE": "#2563EB",
         "RED": "#DC2626",
         "RED_PRESSED": "#B91C1C",
         "TINT_ACCENT": ("#DCFCE7", "#12301E"),
         "TINT_GREEN": ("#DCFCE7", "#122C1D"),
-        "TINT_YELLOW": ("#FEF9C3", "#302A10"),
+        "TINT_BLUE": ("#DBEAFE", "#172554"),
         "TINT_RED": ("#FEE2E2", "#351717"),
         "TINT_NEUTRAL_A": ("#F5F5F5", "#1C1C1C"),
         "TINT_NEUTRAL_B": ("#E8E8E8", "#282828"),
@@ -70,7 +70,7 @@ class UIAssets:
     BORDER_WIDTH = 1
     SIDEBAR_WIDTH = 208
     SIDEBAR_COLLAPSED = 68
-    DEBUG_PALETTE = ["TINT_ACCENT", "TINT_GREEN", "TINT_YELLOW", "TINT_RED"]
+    DEBUG_PALETTE = ["TINT_ACCENT", "TINT_GREEN", "TINT_BLUE", "TINT_RED"]
 
     @classmethod
     def apply_theme(cls) -> None:

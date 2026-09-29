@@ -59,6 +59,25 @@ class Application(ctk.CTk):
         self.launcher = None
         self.workspace.editors[0].focus_set()
 
+    def back_to_menu(self) -> None:
+        """Dispose of the workspace and show a fresh language selection page.
+
+        Args:
+            None.
+        Returns:
+            None; the native application window stays open.
+        """
+        if self.workspace is None:
+            return
+        dark_mode = bool(self.workspace.appearance_switch.get())
+        self.workspace.destroy()
+        self.workspace = None
+        self.launcher = LauncherWindow(self, self.open_workspace, self._close)
+        self.launcher.appearance_switch_var.set("dark" if dark_mode else "light")
+        self.launcher.dark_mode = dark_mode
+        self.launcher.grid(row=0, column=0, sticky="nsew")
+        self.launcher.tkraise()
+
     def _close(self) -> None:
         """Close the native window, allowing active diagnostics to clean up.
 

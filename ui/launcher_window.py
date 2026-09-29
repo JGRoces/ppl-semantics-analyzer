@@ -180,7 +180,7 @@ class LauncherWindow(ctk.CTkFrame):
         self._choose_pair(self.selected_languages)
         ctk.CTkButton(
             inner,
-            text="Open workspace   →",
+            text="Open workspace",
             height=42,
             command=self._on_start,
             **UIAssets.button_kwargs(),

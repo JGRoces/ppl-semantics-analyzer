@@ -6,8 +6,10 @@ their existing behavior; changing pages never destroys or reloads source.
 """
 
 import json
+import os
 import queue
 import threading
+import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
@@ -17,18 +19,18 @@ from core.comparison import compare_snippets, render_report, render_view
 from core.examples import LANGUAGE_LABELS, LESSONS
 from core.execution_runner import runtime_paths
 from ui.line_numbers import LineNumberGutter
+from ui.lesson_resources import LESSON_RESOURCES
 from ui.ui_assets import UIAssets
 
 
 class MainWindow(ctk.CTkFrame):
-    """Present a comparison workbench, lesson library, reports, and guide."""
+    """Present a comparison workbench, lesson library, and reports."""
 
     HEADER_TABS = ["Static AST", "Runtime", "PPL Verdict"]
     PAGE_TITLES = {
         "workspace": "Workspace",
         "lessons": "Demonstrations",
         "reports": "Reports",
-        "guide": "Presentation guide",
     }
 
     def __init__(
@@ -61,6 +63,8 @@ class MainWindow(ctk.CTkFrame):
         self.messages = queue.Queue()
         self.cancel_event = threading.Event()
         self.poll_id = None
+        self.run_bindings = []
+        self.lesson_stdin = ""
         self.controls = []
         self.editors = []
         self.line_gutters = []
@@ -79,7 +83,6 @@ class MainWindow(ctk.CTkFrame):
         self._build_workspace(language_a, language_b)
         self._build_library()
         self._build_reports()
-        self._build_guide()
         self.status_label = ctk.CTkLabel(
             self,
             text="Ready",
@@ -90,8 +93,10 @@ class MainWindow(ctk.CTkFrame):
         self.status_label.grid(
             row=2, column=0, columnspan=2, sticky="ew", padx=20, pady=(0, 8)
         )
-        master.bind("<Control-Return>", lambda event: self._start(True))
-        master.bind("<Command-Return>", lambda event: self._start(True))
+        self.run_bindings = [
+            (sequence, master.bind(sequence, lambda event: self._start(True), add="+"))
+            for sequence in ("<Control-Return>", "<Command-Return>")
+        ]
         self._load_lesson()
         self._show_page("workspace")
 
@@ -216,17 +221,16 @@ class MainWindow(ctk.CTkFrame):
             text_color=UIAssets.COLORS["TEXT_MUTED"],
         )
         self.runtime_label.grid(row=7, column=0, sticky="w", padx=20, pady=18)
-        guide = ctk.CTkButton(
+        self.back_button = ctk.CTkButton(
             self.sidebar,
-            text="?    Presentation guide",
+            text="Back to Menu",
             anchor="w",
             height=42,
             width=40,
-            command=lambda: self._show_page("guide"),
+            command=self.master.back_to_menu,
             **UIAssets.button_kwargs("quiet"),
         )
-        guide.grid(row=8, column=0, sticky="ew", padx=12, pady=(0, 20))
-        self.nav_buttons["guide"] = (guide, "?")
+        self.back_button.grid(row=8, column=0, sticky="ew", padx=12, pady=(0, 20))
 
     def _toggle_sidebar(self) -> None:
         """Collapse navigation without recreating pages or losing editor state.
@@ -251,6 +255,10 @@ class MainWindow(ctk.CTkFrame):
             text="DIAGNOSTICS" if self.sidebar_expanded else "PPL"
         )
         self.sidebar_brand.grid_configure(padx=20 if self.sidebar_expanded else 16)
+        self.back_button.configure(
+            text="Back to Menu" if self.sidebar_expanded else "←",
+            anchor="w" if self.sidebar_expanded else "center",
+        )
         if self.sidebar_expanded:
             self.runtime_label.grid()
         else:
@@ -331,7 +339,7 @@ class MainWindow(ctk.CTkFrame):
         ).pack(anchor="w", pady=(4, 0))
 
     def _build_workspace(self, language_a: str, language_b: str) -> None:
-        """Compose the controls, two editors, shared input, and result card.
+        """Compose the controls, two editors, and expanded result card.
 
         Args:
             language_a: First editor's initial language label.
@@ -341,7 +349,7 @@ class MainWindow(ctk.CTkFrame):
         """
         self.workspace = self._new_page("workspace")
         self.workspace.grid_rowconfigure(2, weight=3)
-        self.workspace.grid_rowconfigure(4, weight=2)
+        self.workspace.grid_rowconfigure(3, weight=2)
         self._heading(
             self.workspace,
             "Comparison workspace",
@@ -354,29 +362,6 @@ class MainWindow(ctk.CTkFrame):
         editor_row.grid_rowconfigure(0, weight=1)
         self._build_editor(editor_row, "A", 0, language_a)
         self._build_editor(editor_row, "B", 1, language_b)
-        input_row = ctk.CTkFrame(self.workspace, **UIAssets.frame_kwargs())
-        input_row.grid(row=3, column=0, sticky="ew", pady=(0, 12))
-        input_row.grid_columnconfigure(0, weight=1)
-        input_row.grid_columnconfigure(1, weight=2)
-        ctk.CTkLabel(
-            input_row, text="STANDARD INPUT", **UIAssets.label_kwargs("label")
-        ).grid(row=0, column=0, padx=12, pady=(8, 0), sticky="w")
-        ctk.CTkLabel(
-            input_row, text="LESSON NOTES", **UIAssets.label_kwargs("label")
-        ).grid(row=0, column=1, padx=12, pady=(8, 0), sticky="w")
-        self.stdin_box = ctk.CTkTextbox(
-            input_row, height=48, **UIAssets.textbox_kwargs()
-        )
-        self.stdin_box.grid(row=1, column=0, sticky="ew", padx=12, pady=(4, 10))
-        self.stdin_box.bind(
-            "<<Modified>>", lambda event: self._text_modified(self.stdin_box)
-        )
-        self.controls.append(self.stdin_box)
-        self.lesson_text = ctk.CTkTextbox(
-            input_row, height=48, wrap="word", **UIAssets.textbox_kwargs()
-        )
-        self.lesson_text.configure(font=UIAssets.FONTS["BODY"], border_width=0)
-        self.lesson_text.grid(row=1, column=1, sticky="ew", padx=12, pady=(4, 10))
         self._build_results()
 
     def _build_tools(self) -> None:
@@ -527,7 +512,7 @@ class MainWindow(ctk.CTkFrame):
             None.
         """
         card = ctk.CTkFrame(self.workspace, **UIAssets.frame_kwargs())
-        card.grid(row=4, column=0, sticky="nsew")
+        card.grid(row=3, column=0, rowspan=1, sticky="nsew")
         card.grid_columnconfigure((0, 1), weight=1, uniform="results")
         card.grid_rowconfigure(2, weight=1)
         header = ctk.CTkFrame(card, fg_color="transparent")
@@ -590,17 +575,17 @@ class MainWindow(ctk.CTkFrame):
         library.grid(row=1, column=0, sticky="nsew")
         library.grid_columnconfigure((0, 1), weight=1, uniform="lessons")
         self.lesson_cards = {}
-        for index, (name, lesson) in enumerate(LESSONS.items()):
+        self.lesson_view_buttons = {}
+        for index, name in enumerate(LESSONS):
             card = ctk.CTkFrame(library, **UIAssets.frame_kwargs())
             card.grid(row=index // 2, column=index % 2, sticky="nsew", padx=6, pady=6)
-            color = ("ACCENT", "GREEN", "YELLOW", "RED")[index % 4]
             ctk.CTkLabel(
                 card,
                 text=f"{index + 1:02}",
                 width=36,
                 height=32,
                 corner_radius=UIAssets.CORNER_RADIUS,
-                fg_color=UIAssets.COLORS[f"TINT_{color}"],
+                fg_color=UIAssets.COLORS["TINT_GREEN"],
                 font=UIAssets.FONTS["H3"],
                 text_color=UIAssets.COLORS["TEXT_PRIMARY"],
             ).pack(anchor="w", padx=18, pady=(18, 12))
@@ -609,23 +594,62 @@ class MainWindow(ctk.CTkFrame):
             )
             ctk.CTkLabel(
                 card,
-                text=lesson["concept"],
+                text=LESSON_RESOURCES[name]["summary"],
                 wraplength=340,
                 justify="left",
                 anchor="w",
                 font=UIAssets.FONTS["BODY"],
                 text_color=UIAssets.COLORS["TEXT_MUTED"],
             ).pack(fill="x", padx=18, pady=(6, 14))
+            actions = ctk.CTkFrame(card, fg_color="transparent")
+            actions.pack(side="bottom", fill="x", padx=18, pady=(0, 18))
+            actions.grid_columnconfigure((0, 1), weight=1)
             button = ctk.CTkButton(
-                card,
-                text="Load demonstration   →",
+                actions,
+                text="Load demonstration",
+                width=150,
                 height=34,
                 command=lambda selected=name: self._select_lesson(selected),
                 **UIAssets.button_kwargs("secondary"),
             )
-            button.pack(fill="x", padx=18, pady=(0, 18))
+            button.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+            view_button = ctk.CTkButton(
+                actions,
+                text="View Lesson",
+                width=100,
+                height=34,
+                command=lambda selected=name: self._view_lesson(selected),
+                **UIAssets.button_kwargs("secondary"),
+            )
+            view_button.grid(row=0, column=1, sticky="ew", padx=(6, 0))
             self.controls.append(button)
             self.lesson_cards[name] = button
+            self.lesson_view_buttons[name] = view_button
+
+    def _view_lesson(self, name: str) -> None:
+        """Open the selected local PDF with the platform's document handler.
+
+        Args:
+            name: Key in LESSON_RESOURCES.
+        Returns:
+            None; missing files and launch failures show a recoverable dialog.
+        """
+        path = (
+            Path(__file__).resolve().parent.parent
+            / "docs" / "lessons" / LESSON_RESOURCES[name]["pdf"]
+        )
+        if not path.is_file():
+            messagebox.showerror(
+                "Lesson PDF not found", f"Missing lesson file:\n{path}", parent=self
+            )
+            return
+        try:
+            if os.name == "nt":
+                os.startfile(str(path))
+            elif not webbrowser.open(path.as_uri()):
+                raise OSError("No application could open the PDF.")
+        except (OSError, webbrowser.Error) as exc:
+            messagebox.showerror("Could not open lesson", str(exc), parent=self)
 
     def _select_lesson(self, name: str) -> None:
         """Load a library choice into the workspace without executing it.
@@ -680,37 +704,6 @@ class MainWindow(ctk.CTkFrame):
             text = render_report(self.report)
         self._set_text(self.report_preview, text, readonly=True)
 
-    def _build_guide(self) -> None:
-        """Expose concise demo instructions and analysis limits inside the app.
-
-        Args:
-            None.
-        Returns:
-            None.
-        """
-        page = self._new_page("guide")
-        self._heading(
-            page,
-            "Ready to present",
-            "A short route through the concepts, evidence, and limitations.",
-        )
-        page.grid_rowconfigure(1, weight=1)
-        guide = ctk.CTkTextbox(page, wrap="word", **UIAssets.textbox_kwargs())
-        guide.configure(font=UIAssets.FONTS["BODY"])
-        guide.grid(row=1, column=0, sticky="nsew")
-        self._set_text(
-            guide,
-            "01  START WITH RECURSION\nLoad Recursion, run both snippets, and explain the base case. Both should print 120.\n\n"
-            "02  COMPARE THE EVIDENCE\nStatic AST shows structure. Runtime shows stdout and diagnostics. PPL Verdict connects observations to language concepts.\n\n"
-            "03  CHANGE THE LANGUAGE\nSelect Python and JavaScript, then load Types and coercion. Python raises an error while JavaScript prints 52. Change B to C++, reload the lesson, and show the compile error.\n\n"
-            "04  DEMONSTRATE INPUT AND RECOVERY\nInput and validation prints 49 for 7 and handles abc. Timeout and Stop demonstrate recovery.\n\n"
-            "05  SAVE YOUR RESULTS\nReports contains the latest comparison. Export report saves source, stdin, diagnostics, and all three views.\n\n"
-            "KEEP THE CLAIMS PRECISE\nPython uses a real tokenizer and AST. JavaScript/C++ structural analysis is approximate; Run invokes their actual toolchains. Equal stdout on one input does not prove equivalence. Startup timings are not language benchmarks.\n\n"
-            "LOCAL EXECUTION\nRun trusted classroom code only. Process limits are not a filesystem or network security sandbox.\n\n"
-            "SHORTCUT\nCtrl/⌘ + Enter runs the current pair. Changing language preserves your source; Load lesson intentionally replaces both editors and stdin.",
-            readonly=True,
-        )
-
     @staticmethod
     def _set_text(widget, text: str, readonly: bool = False) -> None:
         """Replace a textbox's contents, optionally making it read only.
@@ -742,12 +735,7 @@ class MainWindow(ctk.CTkFrame):
         lesson = LESSONS[self.lesson_menu.get()]
         for editor, menu in zip(self.editors, self.language_menus):
             self._set_text(editor, lesson["sources"][LANGUAGE_LABELS[menu.get()]])
-        self._set_text(self.stdin_box, lesson["stdin"])
-        self._set_text(
-            self.lesson_text,
-            lesson["concept"] + "\n\n" + lesson["explanation"],
-            readonly=True,
-        )
+        self.lesson_stdin = lesson["stdin"]
         self._edited()
         self.status_label.configure(
             text=f"Loaded {self.lesson_menu.get()}. Edit either snippet, analyze, or run. Ctrl/⌘ + Enter runs both."
@@ -807,7 +795,7 @@ class MainWindow(ctk.CTkFrame):
             )
             return
         languages = [LANGUAGE_LABELS[menu.get()] for menu in self.language_menus]
-        stdin = self.stdin_box.get("1.0", "end-1c")
+        stdin = self.lesson_stdin
         timeout = float(self.timeout_menu.get())
         self.busy = True
         self._refresh_report_page()
@@ -1014,6 +1002,22 @@ class MainWindow(ctk.CTkFrame):
         except OSError as exc:
             messagebox.showerror("Could not save report", str(exc), parent=self)
 
+    def destroy(self) -> None:
+        """Cancel workspace work and detach callbacks before removing widgets.
+
+        Args:
+            None.
+        Returns:
+            None; workers finish cancellation without accessing Tk widgets.
+        """
+        self.cancel_event.set()
+        if self.poll_id is not None:
+            self.after_cancel(self.poll_id)
+            self.poll_id = None
+        for sequence, binding in self.run_bindings:
+            self.master.unbind(sequence, binding)
+        super().destroy()
+
     def _close(self) -> None:
         """Cancel active work and remove Tk polling before closing the window.
 
@@ -1022,7 +1026,4 @@ class MainWindow(ctk.CTkFrame):
         Returns:
             None.
         """
-        self.cancel_event.set()
-        if self.poll_id is not None:
-            self.after_cancel(self.poll_id)
         self.winfo_toplevel().destroy()
