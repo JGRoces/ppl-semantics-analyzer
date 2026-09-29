@@ -48,6 +48,8 @@ Choose a lesson, click **Load lesson into both editors**, then **Run comparison*
 
 Python **3.10+ with Tk support** is required. JavaScript execution requires Node.js on `PATH`; C++ execution requires `g++` or `clang++` with C++17 support. Missing tools produce a setup diagnostic; Python analysis can still work.
 
+### macOS / Linux
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
@@ -58,7 +60,18 @@ python main.py
 
 `venv` keeps dependencies local to the project. Activation makes `python` point to that environment. The requirements install CustomTkinter and pytest; the unused pandas dependency has been removed. The self-check verifies actual execution before opening the desktop application.
 
-On Windows, activate with `venv\Scripts\activate` instead of `source venv/bin/activate`. This release was verified on the presentation Mac; Windows GUI behavior has not been verified.
+### Windows (PowerShell)
+
+```powershell
+py -m venv venv
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\venv\Scripts\python.exe -m core.self_check
+.\venv\Scripts\python.exe main.py
+```
+
+If `py` is unavailable but `python` works, use `python -m venv venv` for the first command. The explicit environment path avoids PowerShell activation restrictions and ensures installation and launch use the same interpreter. If launching from an editor, select `venv\Scripts\python.exe` as its Python interpreter.
+
+If opening the workspace reports **`'yscrollcommand' is not a supported argument`**, update to a revision containing the gutter compatibility fix in `ui/line_numbers.py`, then rerun the installation and launch commands above. The gutter now attaches its scroll callback to the native Tk text widget. The runtime self-check does not exercise the GUI; test **Open workspace** too.
 
 ## Directory layout
 
@@ -129,6 +142,8 @@ venv/bin/python -m tests.gui_smoke
 ```
 
 The first command runs automated tests, including all 27 lesson/language combinations and normal/error inputs. Tool-dependent tests skip explicitly if their runtime is missing. The second deliberately opens native windows and checks the launcher, worker, result tabs, file loading, export, errors, Stop, and recovery.
+
+On Windows, use `.\venv\Scripts\python.exe -m pytest -q` and `.\venv\Scripts\python.exe -m tests.gui_smoke`. For a focused workspace/gutter check that requires no JavaScript runtime or C++ compiler, run `.\venv\Scripts\python.exe -m tests.gutter_smoke`. This opens the workspace with a wrapper that rejects `yscrollcommand`, then checks line alignment, scrolling, and callback restoration.
 
 Verified on **2026-09-28** on the presentation Mac: Python 3.14.7, Node.js 26.9.0, Apple clang 21.0.0, CustomTkinter 5.2.2. See the testing section in the project documentation for recorded results. Desktop screenshot inspection was unavailable; native widget/callback tests were run.
 

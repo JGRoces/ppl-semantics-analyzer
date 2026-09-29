@@ -45,8 +45,10 @@ class LineNumberGutter(ctk.CTkFrame):
         ]
         # Preserve CTk's scrollbar callback: replacing it outright would make
         # the code scroll while leaving its scrollbar thumb in the wrong place.
-        self.original_scroll_command = editor.cget("yscrollcommand")
-        editor.configure(yscrollcommand=self._on_scroll)
+        # Some CTk versions do not expose this option through the wrapper.
+        # The native Text owns it, so read and configure it there directly.
+        self.original_scroll_command = self.text.cget("yscrollcommand")
+        self.text.configure(yscrollcommand=self._on_scroll)
         self._request_redraw()
 
     def _on_scroll(self, first: str, last: str) -> None:
@@ -149,8 +151,8 @@ class LineNumberGutter(ctk.CTkFrame):
         """
         if self.pending_redraw is not None:
             self.after_cancel(self.pending_redraw)
-        if self.editor.winfo_exists():
-            self.editor.configure(yscrollcommand=self.original_scroll_command)
+        if self.text.winfo_exists():
+            self.text.configure(yscrollcommand=self.original_scroll_command)
             for event, binding in self.bindings:
                 self.text.unbind(event, binding)
         super().destroy()

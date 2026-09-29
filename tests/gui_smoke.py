@@ -11,6 +11,8 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
+import customtkinter as ctk
+
 from ui.application import Application
 from ui.ui_assets import UIAssets
 
@@ -180,7 +182,10 @@ def main() -> None:
         "<Unmap>",
         lambda event: unmapped.append(event.widget) if event.widget == window else None,
     )
-    launcher._on_start()
+    # Reproduce wrappers that reject yscrollcommand while constructing gutters.
+    supported = ctk.CTkTextbox._valid_tk_text_attributes - {"yscrollcommand"}
+    with patch.object(ctk.CTkTextbox, "_valid_tk_text_attributes", supported):
+        launcher._on_start()
     window.update()
     assert launcher.selected_languages == ("Python", "C++")
     assert launcher.dark_mode is False
