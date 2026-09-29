@@ -16,6 +16,63 @@ from ui.main_window import MainWindow
 from ui.ui_assets import UIAssets
 
 
+def check_navigation(app) -> None:
+    """Verify persistent pages, sidebar resizing, and actionable lesson cards.
+
+    Args:
+        app: Dashboard under test.
+    Returns:
+        None; assertions detect source loss, stale navigation, or overflow.
+    """
+    original = [editor.get("1.0", "end-1c") for editor in app.editors]
+    for page in app.PAGE_TITLES:
+        app._show_page(page)
+        app.update()
+        assert app.pages[page].winfo_ismapped()
+        assert app.page_label.cget("text") == app.PAGE_TITLES[page]
+        assert app.nav_buttons[page][0].cget("fg_color") == UIAssets.COLORS["BLUE"]
+        assert sum(frame.winfo_ismapped() for frame in app.pages.values()) == 1
+    assert [editor.get("1.0", "end-1c") for editor in app.editors] == original
+    app._show_page("workspace")
+    app.update()
+    expanded = app.editors[0].winfo_width()
+    app._toggle_sidebar()
+    app.update()
+    assert app.editors[0].winfo_width() > expanded
+    assert not app.runtime_label.winfo_ismapped()
+    app._toggle_sidebar()
+    app.update()
+    assert app.runtime_label.winfo_ismapped()
+    app._show_page("lessons")
+    app.lesson_cards["Iteration"].invoke()
+    app.update()
+    assert app.active_page == "workspace"
+    assert "total" in app.editors[0].get("1.0", "end-1c")
+    app._select_lesson("Recursion")
+    # Check the supported minimum size without relying on desktop capture.
+    app.geometry("1180x760")
+    app.update()
+    for widget in [
+        app.run_button,
+        app.stop_button,
+        app.lesson_menu,
+        *app.language_menus,
+        *app.editors,
+        *app.results,
+    ]:
+        assert widget.winfo_width() > 30
+        assert widget.winfo_height() > 20
+        assert widget.winfo_rootx() >= app.winfo_rootx()
+        assert (
+            widget.winfo_rootx() + widget.winfo_width()
+            <= app.winfo_rootx() + app.winfo_width()
+        )
+        assert (
+            widget.winfo_rooty() + widget.winfo_height()
+            <= app.winfo_rooty() + app.winfo_height()
+        )
+
+
 def check_line_numbers(app) -> None:
     """Exercise gutter alignment after edits, scrolling, resizing and theming.
 
@@ -27,9 +84,13 @@ def check_line_numbers(app) -> None:
     for editor, gutter in zip(app.editors, app.line_gutters):
         app._set_text(editor, "")
         app.update()
-        assert [gutter.surface.itemcget(item, "text") for item in gutter.surface.find_all()] == ["1"]
+        assert [
+            gutter.surface.itemcget(item, "text") for item in gutter.surface.find_all()
+        ] == ["1"]
         small_width = gutter.gutter_width
-        source = "\n".join(f"line_{number} = '{'x' * 150}'" for number in range(1, 1001))
+        source = "\n".join(
+            f"line_{number} = '{'x' * 150}'" for number in range(1, 1001)
+        )
         app._set_text(editor, source)
         app.update()
         assert gutter.gutter_width > small_width
@@ -42,7 +103,11 @@ def check_line_numbers(app) -> None:
         assert int(first) > 1
         for item in labels:
             line = gutter.surface.itemcget(item, "text")
-            expected_y = editor.dlineinfo(f"{line}.0")[1] + gutter.text.winfo_rooty() - gutter.surface.winfo_rooty()
+            expected_y = (
+                editor.dlineinfo(f"{line}.0")[1]
+                + gutter.text.winfo_rooty()
+                - gutter.surface.winfo_rooty()
+            )
             assert abs(gutter.surface.coords(item)[1] - expected_y) <= 1
         assert editor.get("1.0", "end-1c") == source
         editor.see("end-1c")
@@ -54,13 +119,18 @@ def check_line_numbers(app) -> None:
         assert gutter.surface.itemcget(gutter.surface.find_all()[-1], "text") == "1001"
         editor.delete("1.0", "end")
         app.update()
-        assert [gutter.surface.itemcget(item, "text") for item in gutter.surface.find_all()] == ["1"]
+        assert [
+            gutter.surface.itemcget(item, "text") for item in gutter.surface.find_all()
+        ] == ["1"]
     # Appearance changes must reach the native canvas as well as CTk widgets.
     for dark in (True, False):
         UIAssets.set_dark_mode(dark)
         app.update()
         for gutter in app.line_gutters:
-            assert gutter.surface.cget("background") == UIAssets.COLORS["GUTTER_BG"][int(dark)]
+            assert (
+                gutter.surface.cget("background")
+                == UIAssets.COLORS["GUTTER_BG"][int(dark)]
+            )
     app.geometry("1180x720")
     app.update()
     app._load_lesson()
@@ -95,6 +165,11 @@ def main() -> None:
         None; assertions fail the command when an interaction breaks.
     """
     launcher = LauncherWindow()
+    launcher._choose_pair(("Python", "C++"))
+    assert launcher.language_b_combo.get() == "C++"
+    launcher.update()
+    for panel in (launcher.brand_panel, launcher.setup_panel):
+        assert panel.winfo_width() > 350
     launcher.language_b_combo.set("C++")
     launcher.appearance_switch_var.set("light")
     launcher.after(200, launcher._on_start)
@@ -106,30 +181,43 @@ def main() -> None:
         app.update()
         assert not app.appearance_switch.get()
         assert app.language_menus[1].get() == "C++"
+        check_navigation(app)
         check_line_numbers(app)
         app._start(True)
         wait_until_idle(app)
         assert app.report["outputs_equal"] is True
+        app._show_page("reports")
+        app.update()
+        assert "120" in app.report_preview.get("1.0", "end-1c")
+        app._show_page("workspace")
         for view in app.HEADER_TABS:
             app._change_view(view)
             assert app.results[0].get("1.0", "end-1c")
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "report.json"
-            with patch("ui.main_window.filedialog.asksaveasfilename", return_value=str(output)):
+            with patch(
+                "ui.main_window.filedialog.asksaveasfilename", return_value=str(output)
+            ):
                 app._export()
             assert json.loads(output.read_text())["outputs_equal"] is True
             source = Path(directory) / "example.js"
             source.write_text("console.log(9);\n", encoding="utf-8")
-            with patch("ui.main_window.filedialog.askopenfilename", return_value=str(source)):
+            with patch(
+                "ui.main_window.filedialog.askopenfilename", return_value=str(source)
+            ):
                 app._open_source(0)
             assert app.language_menus[0].get() == "JavaScript"
             assert app.report is None
+            assert "No comparison report" in app.report_preview.get("1.0", "end-1c")
         app.language_menus[0].set("Python")
         app.lesson_menu.set("Types and coercion")
         app._load_lesson()
         app._start(True)
         wait_until_idle(app)
-        assert [item["execution"]["status"] for item in app.report["snippets"]] == ["runtime_error", "compile_error"]
+        assert [item["execution"]["status"] for item in app.report["snippets"]] == [
+            "runtime_error",
+            "compile_error",
+        ]
         app.lesson_menu.set("Timeout")
         app._load_lesson()
         app._start(True)
@@ -144,7 +232,9 @@ def main() -> None:
         app.appearance_switch.select()
         app._toggle_appearance()
         app.update()
-        print("PASS: line numbers, editing, vertical/horizontal scroll, theme, launcher, run, views, export, errors, stop, recovery")
+        print(
+            "PASS: line numbers, editing, vertical/horizontal scroll, theme, launcher, run, views, export, errors, stop, recovery"
+        )
     finally:
         app._close()
 

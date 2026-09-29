@@ -83,7 +83,7 @@ The public runner accepts a positive finite timeout up to 30 seconds. The dashbo
 
 ### Design decisions
 
-The UI preserves the team's eight-panel, 10×10 grid and central design tokens. Analysis and execution remain independent of CustomTkinter. A queue connects the worker to the main Tk thread so a slow child does not freeze the desktop window.
+The UI adapts the team's Java Car Rental design into a split launcher and a collapsible dashboard with persistent content pages. Shared design tokens control both themes. Analysis and execution remain independent of CustomTkinter. A queue connects the worker to the main Tk thread so a slow child does not freeze the desktop window.
 
 ## 6. Keywords, Identifiers, Operators, Literals, Data Types, Statements, and Expressions
 
@@ -163,7 +163,7 @@ This adapts the professor's suggested pipeline: **Source → lexical/structural 
 | `core/self_check.py` | Run real factorial programs to verify that located tools work |
 | `ui/main_window.py` | Build panels; snapshot input; start worker; render reports; invalidate stale results; open/export files |
 | `ui/launcher_window.py` | Save language and appearance values before its widgets are destroyed |
-| `ui/ui_assets.py` | Central color, typography, and sharp-corner widget helpers |
+| `ui/ui_assets.py` | Central color, typography, card radii, and widget helpers |
 
 ### Analysis definitions
 

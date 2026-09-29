@@ -1,152 +1,91 @@
-"""
-ui/ui_assets.py
+"""Shared visual tokens adapted from the team's Java Car Rental UIAssets.
 
-Central design-system manager for the PPL Semantics Analyzer desktop UI.
-
-This module is the single source of truth for color, typography, and
-theming rules. No other module should hard-code a hex value, font tuple,
-or corner radius — import from here instead.
-
-Design language: 100% flat. Boxy. Sharp. No rounded corners, no
-gradients, no drop shadows.
+The Python implementation keeps the reference's neutral page/surface hierarchy,
+blue navigation, four accent colors, typography scale, and restrained rounding.
+CustomTkinter resolves (light, dark) pairs instead of Java theme listeners.
 """
 
 import customtkinter as ctk
 
 
 class UIAssets:
-    """Design tokens and global theme enforcement for the app.
+    """Single source of truth for colors, fonts, radii and shared widget styles."""
 
-    Attributes:
-        COLORS: Named color tokens. Mode-aware tokens (surfaces, borders,
-            text) are (light_value, dark_value) tuples that CustomTkinter
-            resolves against the current appearance mode; accent colors
-            and a few "always white" tokens are plain hex strings used
-            unchanged in both modes.
-        FONTS: Named font tuples (family, size, weight) for UI text and
-            code display.
-        CORNER_RADIUS: The single global corner radius value (always 0).
-        BORDER_WIDTH: The default hairline border width, in pixels.
-    """
-
-    # ------------------------------------------------------------------
-    # Color Palette
-    # ------------------------------------------------------------------
-    # Mode-aware tokens are (light_value, dark_value) tuples. CustomTkinter
-    # resolves a tuple automatically against the current appearance mode
-    # and re-renders any widget holding one when ctk.set_appearance_mode()
-    # is called — that's what makes the Dark Mode switch work without any
-    # manual widget reconfiguration. Tokens that should look the same in
-    # both modes (accent colors, "always white" text) stay a single hex
-    # string, which CTk also accepts unchanged.
     COLORS = {
-        # Absolute constants (not mode-aware; used to build the tuples below)
         "PURE_BLACK": "#000000",
-        "BLACK": "#0A0A0A",
+        "BLACK": "#0E0E0E",
         "WHITE": "#FFFFFF",
-
-        # Surfaces — Pure White bg in Light, Pure Black bg in Dark
-        "BG_PRIMARY": ("#FFFFFF", "#0A0A0A"),
-        "BG_SECONDARY": ("#FFFFFF", "#000000"),
-        "SURFACE": ("#FFFFFF", "#0A0A0A"),
-        "CODE_BG": ("#FFFFFF", "#000000"),
-        "GUTTER_BG": ("#F2F2F2", "#161616"),
-        "BORDER": ("#000000", "#FFFFFF"),
-
-        # Text — Black text in Light, White text in Dark
-        "TEXT_PRIMARY": ("#000000", "#FFFFFF"),
-        "TEXT_MUTED": ("#5A5A5A", "#B5B5B5"),
-        "TEXT_ON_ACCENT": "#FFFFFF",  # accent buttons stay dark-ish in both modes
-
-        # Accents — used strategically, not decoratively. Same in both
-        # modes so "blue means primary action" never changes meaning.
-        "BLUE": "#2F6FED",    # primary actions (run, load, save)
-        "RED": "#E53A3A",     # warnings, errors, destructive actions
-        "GREEN": "#2FB350",   # success / valid states
-
-        # Hover / pressed variants — stay flat, just deeper
-        "BLUE_PRESSED": "#2558BE",
-        "RED_PRESSED": "#B92E2E",
-        "GREEN_PRESSED": "#249142",
-
-        # Scaffolding tints — flat, muted, desaturated surfaces used ONLY
-        # to make stub/placeholder panels visually distinguishable during
-        # layout review. Each is (light_tint, dark_tint). Solid hex, no
-        # alpha/gradient. Swap a panel's real fg_color to "SURFACE" once
-        # it has real content.
-        "TINT_BLUE": ("#DCE6FB", "#12203D"),
-        "TINT_RED": ("#FBE0E0", "#3A1414"),
-        "TINT_GREEN": ("#DFF3E4", "#12301C"),
-        "TINT_NEUTRAL_A": ("#F2F2F2", "#161616"),
-        "TINT_NEUTRAL_B": ("#E8E8E8", "#1F1F1F"),
+        "BG_PRIMARY": ("#EFEFEF", "#000000"),
+        "BG_SECONDARY": ("#FFFFFF", "#0E0E0E"),
+        "SURFACE": ("#FFFFFF", "#0E0E0E"),
+        "CODE_BG": ("#FFFFFF", "#0E0E0E"),
+        "GUTTER_BG": ("#F7F7F8", "#121212"),
+        "BORDER": ("#DADADA", "#262626"),
+        "TEXT_PRIMARY": ("#111111", "#F0F0F0"),
+        "TEXT_MUTED": ("#6B6B6B", "#A0A0A0"),
+        "TEXT_PLACEHOLDER": ("#969696", "#696969"),
+        "TEXT_ON_ACCENT": "#FFFFFF",
+        "BLUE": "#2563EB",
+        "BLUE_PRESSED": "#1D4ED8",
+        "GREEN": "#16A34A",
+        "GREEN_PRESSED": "#15803D",
+        "YELLOW": "#EAB308",
+        "RED": "#DC2626",
+        "RED_PRESSED": "#B91C1C",
+        "TINT_BLUE": ("#DBEAFE", "#142443"),
+        "TINT_GREEN": ("#DCFCE7", "#122C1D"),
+        "TINT_YELLOW": ("#FEF9C3", "#302A10"),
+        "TINT_RED": ("#FEE2E2", "#351717"),
+        "TINT_NEUTRAL_A": ("#F5F5F5", "#1C1C1C"),
+        "TINT_NEUTRAL_B": ("#E8E8E8", "#282828"),
+        "CHROME": "#121212",
+        "CHROME_BORDER": "#262626",
+        "CHROME_TEXT": "#F0F0F0",
+        "CHROME_MUTED": "#A0A0A0",
+        "CODE_KEYWORD": "#93C5FD",
+        "CODE_VALUE": "#86EFAC",
     }
-
-    # Cycled by debug_frame_kwargs() to give scaffolding panels distinct,
-    # still-flat backgrounds so layout boundaries read clearly at a glance.
-    DEBUG_PALETTE = [
-        "TINT_BLUE",
-        "TINT_RED",
-        "TINT_GREEN",
-        "TINT_NEUTRAL_A",
-        "TINT_NEUTRAL_B",
-    ]
-
-    # ------------------------------------------------------------------
-    # Typography
-    # ------------------------------------------------------------------
-    # CTk accepts a tuple of (family, size) or (family, size, weight).
-    # Families use system-safe defaults; CustomTkinter substitutes a
-    # fallback automatically if a family is unavailable on the host OS.
     FONTS = {
         "UI_FAMILY": "Segoe UI",
         "MONO_FAMILY": "Consolas",
-
+        "DISPLAY": ("Segoe UI", 34, "bold"),
         "H1": ("Segoe UI", 22, "bold"),
-        "H2": ("Segoe UI", 16, "bold"),
+        "H2": ("Segoe UI", 15, "bold"),
+        "H3": ("Segoe UI", 13, "bold"),
         "BODY": ("Segoe UI", 13, "normal"),
         "LABEL": ("Segoe UI", 11, "normal"),
         "BUTTON": ("Segoe UI", 13, "bold"),
+        "INPUT": ("Segoe UI", 14, "normal"),
+        "STAT": ("Segoe UI", 32, "bold"),
         "CODE": ("Consolas", 13, "normal"),
         "CODE_SMALL": ("Consolas", 11, "normal"),
     }
-
-    # The one number that defines the "boxy" aesthetic. Every widget
-    # factory below enforces this at the call site.
-    CORNER_RADIUS = 0
+    CORNER_RADIUS = 8
+    CARD_RADIUS = 12
+    SHELL_RADIUS = 0
     BORDER_WIDTH = 1
+    SIDEBAR_WIDTH = 208
+    SIDEBAR_COLLAPSED = 68
+    DEBUG_PALETTE = ["TINT_BLUE", "TINT_GREEN", "TINT_YELLOW", "TINT_RED"]
 
     @classmethod
     def apply_theme(cls) -> None:
-        """Apply the global CustomTkinter appearance settings.
-
-        CustomTkinter has no single switch for "corner_radius=0
-        everywhere" — each widget instance takes its own corner_radius
-        kwarg. This method sets what CAN be set globally (appearance
-        mode, base color scale); the `*_kwargs()` helpers below are
-        what actually enforce sharp corners on each widget. Defaults to
-        Dark mode; call `set_dark_mode(False)` (e.g. from a toggle) to
-        switch to Light at runtime.
+        """Start in the reference project's light appearance.
 
         Args:
             None.
-
         Returns:
-            None.
+            None; callers may immediately restore a user's chosen mode.
         """
-        ctk.set_appearance_mode("Dark")
+        ctk.set_appearance_mode("Light")
         ctk.set_default_color_theme("blue")
 
     @classmethod
     def set_dark_mode(cls, enabled: bool) -> None:
-        """Switch the global CustomTkinter appearance mode at runtime.
-
-        Every widget built with a mode-aware (light, dark) color tuple
-        from `COLORS` re-renders automatically when this is called — no
-        manual widget reconfiguration needed.
+        """Switch all appearance-aware widgets together.
 
         Args:
-            enabled: True to switch to Dark mode, False for Light mode.
-
+            enabled: Whether to select dark appearance.
         Returns:
             None.
         """
@@ -154,62 +93,27 @@ class UIAssets:
 
     @staticmethod
     def center_window(window, width: int, height: int) -> None:
-        """Center a Tk/CTk window on the primary monitor and set its size.
+        """Center the native window on its current screen.
 
         Args:
-            window: The Tk or CTk root window to position. Must expose
-                `winfo_screenwidth()`, `winfo_screenheight()`, and
-                `geometry()` (true of both `ctk.CTk` and `tk.Tk`).
-            width: Desired window width, in pixels.
-            height: Desired window height, in pixels.
-
+            window: Tk root to position.
+            width: Desired width in logical pixels.
+            height: Desired height in logical pixels.
         Returns:
             None.
         """
-        screen_width = window.winfo_screenwidth()
-        screen_height = window.winfo_screenheight()
-        x = (screen_width - width) // 2
-        y = (screen_height - height) // 2
+        x = max(0, (window.winfo_screenwidth() - width) // 2)
+        y = max(0, (window.winfo_screenheight() - height) // 2)
         window.geometry(f"{width}x{height}+{x}+{y}")
 
     @classmethod
-    def switch_kwargs(cls) -> dict:
-        """Return standard kwargs for a flat CTkSwitch (e.g. dark-mode toggle).
-
-        Note: CTkSwitch's circular handle has no `corner_radius` control
-        in CustomTkinter's public API (only `corner_radius` for the
-        track is supported) — the handle stays round regardless. This
-        is a known, accepted exception to the "no rounded corners" rule
-        for this one control.
-
-        Args:
-            None.
-
-        Returns:
-            dict: Keyword arguments to unpack into a CTkSwitch
-            constructor.
-        """
-        return {
-            "corner_radius": cls.CORNER_RADIUS,
-            "fg_color": cls.COLORS["TINT_NEUTRAL_A"],
-            "progress_color": cls.COLORS["BLUE"],
-            "button_color": cls.COLORS["BORDER"],
-            "button_hover_color": cls.COLORS["TEXT_MUTED"],
-            "text_color": cls.COLORS["TEXT_PRIMARY"],
-            "font": cls.FONTS["LABEL"],
-        }
-
-    @classmethod
     def frame_kwargs(cls, border: bool = True) -> dict:
-        """Return standard kwargs for a flat, boxy CTkFrame.
+        """Style a surface card with a subtle border.
 
         Args:
-            border: Whether the frame should render a 1px hairline
-                border. Defaults to True.
-
+            border: Whether the card needs a visible divider.
         Returns:
-            dict: Keyword arguments to unpack into a CTkFrame
-            constructor.
+            CTkFrame constructor arguments.
         """
         return {
             "corner_radius": cls.CORNER_RADIUS,
@@ -219,76 +123,44 @@ class UIAssets:
         }
 
     @classmethod
-    def debug_frame_kwargs(cls, index: int, border: bool = True) -> dict:
-        """Return flat CTkFrame kwargs with a scaffolding tint for visibility.
-
-        Cycles through `DEBUG_PALETTE` by index so adjacent stub panels in
-        a grid layout are easy to tell apart during layout review. Still
-        fully flat (corner_radius=0, solid fg_color) — this is a layout
-        aid, not a themed final look.
+    def button_kwargs(cls, variant: str = "primary") -> dict:
+        """Style an action, outlined secondary control, or quiet navigation item.
 
         Args:
-            index: Position of this panel in the layout (e.g. its
-                enumeration order). Wraps around via modulo, so any
-                non-negative int is safe to pass.
-            border: Whether the frame should render a 1px hairline
-                border. Defaults to True.
-
+            variant: primary, success, danger, secondary, or quiet.
         Returns:
-            dict: Keyword arguments to unpack into a CTkFrame
-            constructor.
+            CTkButton constructor arguments.
+        Raises:
+            ValueError: An unknown variant was requested.
         """
-        tint_key = cls.DEBUG_PALETTE[index % len(cls.DEBUG_PALETTE)]
+        variants = {
+            "primary": ("BLUE", "BLUE_PRESSED", "TEXT_ON_ACCENT"),
+            "success": ("GREEN", "GREEN_PRESSED", "TEXT_ON_ACCENT"),
+            "danger": ("TINT_RED", "TINT_RED", "RED"),
+            "secondary": ("SURFACE", "TINT_NEUTRAL_A", "TEXT_PRIMARY"),
+            "quiet": ("SURFACE", "TINT_BLUE", "TEXT_MUTED"),
+        }
+        if variant not in variants:
+            raise ValueError(f"Unknown button variant: {variant}")
+        base, hover, text = variants[variant]
         return {
             "corner_radius": cls.CORNER_RADIUS,
-            "fg_color": cls.COLORS[tint_key],
-            "border_width": cls.BORDER_WIDTH if border else 0,
+            "fg_color": cls.COLORS[base],
+            "hover_color": cls.COLORS[hover],
+            "text_color": cls.COLORS[text],
+            "font": cls.FONTS["BUTTON"],
+            "border_width": cls.BORDER_WIDTH if variant == "secondary" else 0,
             "border_color": cls.COLORS["BORDER"],
         }
 
     @classmethod
-    def button_kwargs(cls, variant: str = "primary") -> dict:
-        """Return standard kwargs for a flat CTkButton in a given variant.
-
-        Args:
-            variant: One of "primary" (blue), "danger" (red), or
-                "success" (green).
-
-        Returns:
-            dict: Keyword arguments to unpack into a CTkButton
-            constructor.
-
-        Raises:
-            ValueError: If variant is not a recognized option.
-        """
-        variants = {
-            "primary": (cls.COLORS["BLUE"], cls.COLORS["BLUE_PRESSED"]),
-            "danger": (cls.COLORS["RED"], cls.COLORS["RED_PRESSED"]),
-            "success": (cls.COLORS["GREEN"], cls.COLORS["GREEN_PRESSED"]),
-        }
-        if variant not in variants:
-            raise ValueError(f"Unknown button variant: {variant!r}")
-
-        fg_color, hover_color = variants[variant]
-        return {
-            "corner_radius": cls.CORNER_RADIUS,
-            "fg_color": fg_color,
-            "hover_color": hover_color,
-            "text_color": cls.COLORS["TEXT_ON_ACCENT"],
-            "font": cls.FONTS["BUTTON"],
-            "border_width": 0,
-        }
-
-    @classmethod
     def textbox_kwargs(cls) -> dict:
-        """Return standard kwargs for a flat CTkTextbox (code editors).
+        """Style an editor or output area with shared monospace typography.
 
         Args:
             None.
-
         Returns:
-            dict: Keyword arguments to unpack into a CTkTextbox
-            constructor.
+            CTkTextbox constructor arguments.
         """
         return {
             "corner_radius": cls.CORNER_RADIUS,
@@ -301,49 +173,78 @@ class UIAssets:
 
     @classmethod
     def option_menu_kwargs(cls) -> dict:
-        """Return design tokens for a flat language or lesson selector.
+        """Style a neutral selector so primary actions retain visual emphasis.
 
         Args:
             None.
         Returns:
-            CTkOptionMenu keyword arguments shared across panels.
+            CTkOptionMenu constructor arguments.
         """
         return {
             "corner_radius": cls.CORNER_RADIUS,
-            "fg_color": cls.COLORS["BLUE"],
-            "button_color": cls.COLORS["BLUE"],
-            "button_hover_color": cls.COLORS["BLUE_PRESSED"],
+            "fg_color": cls.COLORS["TINT_NEUTRAL_A"],
+            "button_color": cls.COLORS["TINT_NEUTRAL_A"],
+            "button_hover_color": cls.COLORS["TINT_NEUTRAL_B"],
             "dropdown_fg_color": cls.COLORS["SURFACE"],
             "dropdown_text_color": cls.COLORS["TEXT_PRIMARY"],
-            "dropdown_hover_color": cls.COLORS["TINT_NEUTRAL_A"],
-            "text_color": cls.COLORS["TEXT_ON_ACCENT"],
+            "dropdown_hover_color": cls.COLORS["TINT_BLUE"],
+            "text_color": cls.COLORS["TEXT_PRIMARY"],
             "font": cls.FONTS["BODY"],
         }
 
     @classmethod
-    def label_kwargs(cls, style: str = "body") -> dict:
-        """Return standard kwargs for a CTkLabel in a given text style.
+    def switch_kwargs(cls) -> dict:
+        """Style the appearance switch with the shared blue accent.
 
         Args:
-            style: One of "h1", "h2", "body", or "label".
-
+            None.
         Returns:
-            dict: Keyword arguments to unpack into a CTkLabel
-            constructor.
-
-        Raises:
-            ValueError: If style is not a recognized option.
+            CTkSwitch constructor arguments.
         """
-        font_map = {
-            "h1": cls.FONTS["H1"],
-            "h2": cls.FONTS["H2"],
-            "body": cls.FONTS["BODY"],
-            "label": cls.FONTS["LABEL"],
-        }
-        if style not in font_map:
-            raise ValueError(f"Unknown label style: {style!r}")
-
         return {
-            "font": font_map[style],
+            "corner_radius": cls.CORNER_RADIUS,
+            "fg_color": cls.COLORS["TINT_NEUTRAL_B"],
+            "progress_color": cls.COLORS["BLUE"],
+            "button_color": cls.COLORS["WHITE"],
+            "button_hover_color": cls.COLORS["TINT_NEUTRAL_A"],
             "text_color": cls.COLORS["TEXT_PRIMARY"],
+            "font": cls.FONTS["LABEL"],
         }
+
+    @classmethod
+    def label_kwargs(cls, style: str = "body") -> dict:
+        """Select a named typography level.
+
+        Args:
+            style: A lowercase key from FONTS (e.g. display, h1, body, label).
+        Returns:
+            CTkLabel constructor arguments.
+        Raises:
+            ValueError: The style does not name a font tuple.
+        """
+        font = cls.FONTS.get(style.upper())
+        if not isinstance(font, tuple):
+            raise ValueError(f"Unknown text style: {style}")
+        return {"font": font, "text_color": cls.COLORS["TEXT_PRIMARY"]}
+
+    @classmethod
+    def accent_bar(cls, parent):
+        """Build the reference project's four-color brand mark.
+
+        Args:
+            parent: Widget containing the mark.
+        Returns:
+            A small frame ready for grid/pack placement.
+        """
+        bar = ctk.CTkFrame(
+            parent, fg_color="transparent", corner_radius=cls.SHELL_RADIUS
+        )
+        for index, color in enumerate(("BLUE", "GREEN", "YELLOW", "RED")):
+            ctk.CTkFrame(
+                bar,
+                width=18,
+                height=4,
+                fg_color=cls.COLORS[color],
+                corner_radius=cls.SHELL_RADIUS,
+            ).grid(row=0, column=index, padx=(0, 3))
+        return bar

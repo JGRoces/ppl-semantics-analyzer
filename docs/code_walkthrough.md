@@ -6,7 +6,7 @@ This guide explains the major code blocks and decisions so each team member can 
 
 `main.py:main()` creates the launcher and runs its event loop. Cancel leaves the result as `cancelled`, so the function returns. Start saves the language selections and appearance in ordinary Python attributes **before** destroying the launcher's Tk widgets. The dashboard then receives those saved values. Reading a destroyed combo box would be invalid, which is why the saved values matter.
 
-`LauncherWindow` configures the original centered 10×10 layout. Its two read-only combo boxes restrict input to supported language labels. `_on_toggle_appearance()` changes the shared theme. `_on_start()` saves settings and closes; `_on_cancel()` closes without launching the dashboard. `get_selected_languages()` returns the saved selections.
+`LauncherWindow` builds a split branding/setup screen inspired by the Java LoginGUI. `_choose_pair()` fills both language selectors from a preset card; `_sync_pair()` highlights the card matching the current choices. Its two menus restrict input to supported language labels. `_on_toggle_appearance()` changes the shared theme. `_on_start()` saves settings and closes; `_on_cancel()` closes without launching the dashboard. `get_selected_languages()` returns the saved selections.
 
 ## 2. Static analysis: `core/ast_analyzer.py`
 
@@ -114,9 +114,9 @@ Syntax error has a deliberately malformed header. Runtime error uses valid synta
 
 ## 6. Dashboard: `ui/main_window.py`
 
-`__init__()` creates state, the queue, a cancellation event, and the eight original panels. `_configure_grid()` sets resize behavior while preserving panel coordinates; `_frame()` applies shared flat styling.
+`__init__()` creates state, the queue, a cancellation event, and the dashboard shell. `_new_page()` allocates persistent pages in a common content area. `_show_page()` switches visibility and updates the active navigation; it never destroys editors. `_toggle_sidebar()` reduces the sidebar width and hides longer labels, giving the editors more room without losing source.
 
-The `_build_*` methods create the header, sidebar, tools, source editors, and result columns. `_button()` standardizes action styling and records controls to disable while work runs. `_toggle_appearance()` applies the selected theme. `_set_text()` replaces text and optionally makes it read-only.
+The `_build_*` methods create the header, sidebar, workspace, lesson library, report page, and guide. `_heading()` standardizes page titles. `_action()` styles toolbar buttons and registers controls to disable while work runs. `_select_lesson()` loads a library choice and returns to the workspace. `_refresh_report_page()` shows the current snapshot, a processing message, or an empty state so navigation cannot reveal stale results. `_toggle_appearance()` applies the selected theme. `_set_text()` replaces text and optionally makes it read-only.
 
 `_load_lesson()` selects sources matching both language menus and fills shared stdin. `_text_modified()` handles the native modified flag for typing, paste, cut, undo, and redo. `_edited()` discards old results, preventing changed source from being displayed alongside stale evidence.
 
@@ -140,7 +140,7 @@ The gutter grows to fit three- or four-digit line numbers and shrinks when lines
 
 ## 8. Design tokens and verification
 
-`UIAssets` centralizes colors, fonts, borders, and sharp corners. Its style factories return argument dictionaries used by widget constructors; appearance-aware color pairs select the light or dark value. The new gutter adds one background token and reuses the editor font and muted text color.
+`UIAssets` centralizes colors, fonts, subtle borders, and rounded card/button radii, adapting the Java UIAssets design. The `accent_bar()` factory, which builds the four-color mark. Its style factories return argument dictionaries used by widget constructors; appearance-aware color pairs select the light or dark value. The new gutter adds one background token and reuses the editor font and muted text color.
 
 `core.self_check:main()` runs a real factorial snippet in each language and checks for 120. Locating an executable alone would not prove a compiler can build a program.
 

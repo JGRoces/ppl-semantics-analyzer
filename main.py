@@ -3,7 +3,7 @@ main.py
 
 Root entry point for the PPL Semantics Analyzer desktop application.
 
-Flow: show LauncherWindow first (an HWiNFO-style "start diagnostics"
+Flow: show LauncherWindow first (a split welcome and comparison setup
 screen). If the user clicks Start, close the launcher and open
 MainWindow. If they cancel or close the launcher instead, the app
 exits without ever opening the dashboard.

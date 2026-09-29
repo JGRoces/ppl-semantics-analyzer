@@ -13,7 +13,7 @@ venv/bin/python -m core.self_check
 venv/bin/python main.py
 ```
 
-The first command runs a real factorial program in each language, including C++ compilation. All three should print `PASS`. The second opens the launcher; choose two languages and click **Start Diagnostics**. No browser, server, or internet connection is needed after installation.
+The first command runs a real factorial program in each language, including C++ compilation. All three should print `PASS`. The second opens the launcher; choose two languages and click **Open workspace**. No browser, server, or internet connection is needed after installation.
 
 Choose a lesson, click **Load lesson into both editors**, then **Run comparison**. Use **Static AST**, **Runtime**, and **PPL Verdict** to inspect structure, output/errors, and language concepts. Changing a language preserves the source; click **Load lesson** to replace it with the corresponding example. Loading a lesson intentionally replaces both editors and standard input.
 
@@ -42,7 +42,7 @@ Choose a lesson, click **Load lesson into both editors**, then **Run comparison*
 - Responsive UI: background computation returns reports through a queue; only the main thread updates Tk.
 - Language reference profiles and source-specific observations, including successful-output comparison.
 - Markdown/JSON report export containing source, input, diagnostics, and all three views.
-- Consistent flat design, light/dark mode, and launcher language/theme handoff.
+- Car Rental-inspired welcome screen, collapsible navigation, lesson cards, report page, and light/dark mode.
 
 ## Installation from a fresh clone
 
@@ -71,8 +71,8 @@ core/
   comparison.py              Comparison pipeline, language profiles, report text
   self_check.py              Actual runtime/compiler readiness check
 ui/
-  launcher_window.py         Language and appearance selection
-  main_window.py             Eight-panel dashboard and worker lifecycle
+  launcher_window.py         Split welcome screen and comparison choice cards
+  main_window.py             Dashboard pages, workspace, and worker lifecycle
   ui_assets.py               Shared design tokens and widget style helpers
 tests/
   test_cases.py              Automated backend, regression, and demo tests
@@ -105,13 +105,19 @@ Optional Markdown or JSON report export
 
 ## Design philosophy
 
-The original **eight panels on a 10×10 grid** are preserved. Their resize weights accommodate real editors and output; their agreed grid positions are unchanged.
+The UI takes inspiration from the team's Java Car Rental project: a split welcome screen, four-color brand mark, neutral top bar/sidebar, blue active navigation, and rounded cards. The user-approved redesign replaces the earlier fixed 10×10 grid and sharp-corner rule.
 
-- Flat surfaces, sharp corners, no gradients or shadows.
-- White/black mode-aware surfaces with blue actions, green Run, and red Stop.
-- All colors, fonts, and corner radii come from `ui/ui_assets.py`.
-- Scrollable lesson controls and result columns keep longer diagnostics accessible.
-- Editing source or stdin invalidates previous results to prevent stale evidence.
+- Light mode: gray page background, white cards, muted labels, subtle dividers.
+- Dark mode: black page background and near-black surfaces with readable text.
+- **Workspace** retains both line-numbered editors, shared input, execution controls, and result tabs.
+- **Demonstrations** presents nine lesson cards that load the selected language pair.
+- **Reports** shows the current source/input snapshot and supports Markdown/JSON export.
+- **Presentation guide** provides a short demo sequence and honest analysis limitations.
+- Collapsing the sidebar gives the editors more room without reloading source.
+- All fonts, colors, and radii remain centralized in `ui/ui_assets.py`.
+- Native window controls preserve macOS resizing and focus behavior.
+
+See [Design adaptation](docs/design_adaptation.md) for reference-to-Python mappings and implementation decisions.
 
 ## Verification
 

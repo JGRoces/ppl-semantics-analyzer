@@ -1,11 +1,8 @@
-"""Interactive Group 4 dashboard using the team's original eight-panel grid.
+"""Car Rental-inspired dashboard shell around the existing PPL workflow.
 
-The root still uses the original 10x10 coordinates: header (0,0,2,10),
-analytics title (2,1,1,9), sidebar (2,0,7,1), tools (3,1,6,2), editors
-(3,3,4,3)/(3,6,4,3), results (7,3,2,6), footer (9,0,1,10).
-
-Only the main thread touches Tk widgets. A worker receives immutable text
-snapshots and returns a report through a Queue; after() polls that queue.
+A neutral top bar, collapsible navigation, and persistent content pages replace
+fixed grid divisions. The worker, comparison service, editors, and reports keep
+their existing behavior; changing pages never destroys or reloads source.
 """
 
 import json
@@ -24,33 +21,47 @@ from ui.ui_assets import UIAssets
 
 
 class MainWindow(ctk.CTk):
-    """Display editable sources, deterministic lessons, and measured results."""
+    """Present a comparison workbench, lesson library, reports, and guide."""
 
-    GRID_SIZE = 10
     HEADER_TABS = ["Static AST", "Runtime", "PPL Verdict"]
+    PAGE_TITLES = {
+        "workspace": "Workspace",
+        "lessons": "Demonstrations",
+        "reports": "Reports",
+        "guide": "Presentation guide",
+    }
 
-    def __init__(self, language_a: str = "Python", language_b: str = "JavaScript",
-                 dark_mode: bool = True) -> None:
-        """Build the dashboard and load the initial recursion lesson.
+    def __init__(
+        self,
+        language_a: str = "Python",
+        language_b: str = "JavaScript",
+        dark_mode: bool = False,
+    ) -> None:
+        """Create the themed shell and load the initial recursion lesson.
 
         Args:
-            language_a: First launcher language label.
-            language_b: Second launcher language label.
-            dark_mode: Appearance selected in the launcher.
+            language_a: First language selected in the launcher.
+            language_b: Second language selected in the launcher.
+            dark_mode: Appearance carried over from the launcher.
         Returns:
             None.
         """
         super().__init__()
         UIAssets.apply_theme()
         UIAssets.set_dark_mode(dark_mode)
-        self.title("PPL Semantics Analyzer — Group 4")
-        UIAssets.center_window(self, min(1440, self.winfo_screenwidth() - 40),
-                               min(900, self.winfo_screenheight() - 80))
-        self.minsize(1180, 720)
+        self.title("Paradigm Diagnostics — Group 4")
+        UIAssets.center_window(
+            self,
+            min(1460, self.winfo_screenwidth() - 40),
+            min(940, self.winfo_screenheight() - 80),
+        )
+        self.minsize(1180, 760)
         self.configure(fg_color=UIAssets.COLORS["BG_PRIMARY"])
         self.report = None
         self.busy = False
         self.active_view = "Static AST"
+        self.active_page = "workspace"
+        self.sidebar_expanded = True
         self.messages = queue.Queue()
         self.cancel_event = threading.Event()
         self.poll_id = None
@@ -59,95 +70,99 @@ class MainWindow(ctk.CTk):
         self.line_gutters = []
         self.language_menus = []
         self.results = []
-        self._configure_grid()
+        self.pages = {}
+        self.nav_buttons = {}
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(1, weight=1)
         self._build_header(dark_mode)
         self._build_sidebar()
-        self._build_tools()
-        self._build_editor("A", 3, language_a)
-        self._build_editor("B", 6, language_b)
-        self._build_results()
-        self.div2_footer = self._frame(9, 0, 1, 10)
-        self.status_label = ctk.CTkLabel(self.div2_footer, text="Ready", anchor="w",
-                                        **UIAssets.label_kwargs("label"))
-        self.status_label.pack(fill="x", padx=12, pady=4)
+        self.content_area = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_area.grid(row=1, column=1, sticky="nsew", padx=20, pady=(18, 12))
+        self.content_area.grid_columnconfigure(0, weight=1)
+        self.content_area.grid_rowconfigure(0, weight=1)
+        self._build_workspace(language_a, language_b)
+        self._build_library()
+        self._build_reports()
+        self._build_guide()
+        self.status_label = ctk.CTkLabel(
+            self,
+            text="Ready",
+            anchor="w",
+            font=UIAssets.FONTS["LABEL"],
+            text_color=UIAssets.COLORS["TEXT_MUTED"],
+        )
+        self.status_label.grid(
+            row=2, column=0, columnspan=2, sticky="ew", padx=20, pady=(0, 8)
+        )
         self.protocol("WM_DELETE_WINDOW", self._close)
         self.bind("<Control-Return>", lambda event: self._start(True))
         self.bind("<Command-Return>", lambda event: self._start(True))
         self._load_lesson()
-
-    def _configure_grid(self) -> None:
-        """Assign resize weights without moving the agreed panel coordinates.
-
-        Args:
-            None.
-        Returns:
-            None.
-        """
-        for column in range(self.GRID_SIZE):
-            self.grid_columnconfigure(column, weight=1 if 3 <= column <= 8 else 0)
-        self.grid_columnconfigure(0, minsize=100)
-        self.grid_columnconfigure(1, minsize=115)
-        self.grid_columnconfigure(2, minsize=115)
-        self.grid_columnconfigure(9, minsize=12)
-        for row in range(self.GRID_SIZE):
-            self.grid_rowconfigure(row, weight=1 if 3 <= row <= 8 else 0)
-        self.grid_rowconfigure(2, minsize=48)
-
-    def _frame(self, row: int, column: int, rowspan: int, columnspan: int):
-        """Create a flat panel at the established grid position.
-
-        Args:
-            row: Top grid row.
-            column: Left grid column.
-            rowspan: Number of rows to occupy.
-            columnspan: Number of columns to occupy.
-        Returns:
-            The themed and gridded frame.
-        """
-        frame = ctk.CTkFrame(self, **UIAssets.frame_kwargs())
-        frame.grid(row=row, column=column, rowspan=rowspan, columnspan=columnspan,
-                   sticky="nsew", padx=1, pady=1)
-        return frame
+        self._show_page("workspace")
 
     def _build_header(self, dark_mode: bool) -> None:
-        """Build the title, functional view selector, and appearance toggle.
+        """Build a continuous surface top bar with group identity and actions.
 
         Args:
-            dark_mode: Initial appearance state.
+            dark_mode: Initial switch state.
         Returns:
             None.
         """
-        self.div1_header = self._frame(0, 0, 2, 10)
-        self.div1_header.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(self.div1_header, text="PARADIGM DIAGNOSTICS",
-                     **UIAssets.label_kwargs("h1")).grid(row=0, column=0, padx=18, pady=16, sticky="w")
-        self.tab_strip = ctk.CTkSegmentedButton(
-            self.div1_header, values=self.HEADER_TABS, command=self._change_view,
-            corner_radius=UIAssets.CORNER_RADIUS, font=UIAssets.FONTS["BODY"],
-            fg_color=UIAssets.COLORS["SURFACE"], selected_color=UIAssets.COLORS["BLUE"],
-            selected_hover_color=UIAssets.COLORS["BLUE_PRESSED"],
-            unselected_color=UIAssets.COLORS["SURFACE"],
-            unselected_hover_color=UIAssets.COLORS["TINT_NEUTRAL_A"],
-            text_color=UIAssets.COLORS["TEXT_PRIMARY"],
+        header = ctk.CTkFrame(
+            self,
+            height=68,
+            fg_color=UIAssets.COLORS["SURFACE"],
+            corner_radius=UIAssets.SHELL_RADIUS,
         )
-        self.tab_strip.set(self.active_view)
-        self.tab_strip.grid(row=0, column=1, padx=12)
+        header.grid(row=0, column=0, columnspan=2, sticky="ew")
+        header.grid_columnconfigure(2, weight=1)
+        ctk.CTkLabel(
+            header,
+            text="G4",
+            width=38,
+            height=38,
+            corner_radius=UIAssets.CARD_RADIUS,
+            fg_color=UIAssets.COLORS["TINT_YELLOW"],
+            text_color=UIAssets.COLORS["TEXT_PRIMARY"],
+            font=UIAssets.FONTS["H3"],
+        ).grid(row=0, column=0, padx=(22, 12), pady=14)
+        identity = ctk.CTkFrame(header, fg_color="transparent")
+        identity.grid(row=0, column=1, sticky="w")
+        ctk.CTkLabel(
+            identity, text="Paradigm Diagnostics", **UIAssets.label_kwargs("h3")
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            identity,
+            text="Principles of Programming Languages",
+            font=UIAssets.FONTS["LABEL"],
+            text_color=UIAssets.COLORS["TEXT_MUTED"],
+        ).pack(anchor="w")
+        self.page_label = ctk.CTkLabel(
+            header, text="Workspace", **UIAssets.label_kwargs("h2")
+        )
+        self.page_label.grid(row=0, column=2, sticky="e", padx=24)
+        self.export_button = ctk.CTkButton(
+            header,
+            text="Export report",
+            width=120,
+            height=34,
+            command=self._export,
+            **UIAssets.button_kwargs("secondary"),
+        )
+        self.export_button.grid(row=0, column=3, padx=(0, 22))
+        self.export_button.configure(state="disabled")
         self.appearance_switch = ctk.CTkSwitch(
-            self.div1_header, text="Dark Mode", command=self._toggle_appearance,
+            header,
+            text="Dark mode",
+            command=self._toggle_appearance,
             **UIAssets.switch_kwargs(),
         )
+        self.appearance_switch.grid(row=0, column=4, padx=(0, 22))
         if dark_mode:
             self.appearance_switch.select()
-        self.appearance_switch.grid(row=0, column=2, padx=18)
-        self.div7_analytics_title = self._frame(2, 1, 1, 9)
-        self.summary_label = ctk.CTkLabel(
-            self.div7_analytics_title, text="", anchor="w",
-            **UIAssets.label_kwargs("body"),
-        )
-        self.summary_label.pack(fill="x", padx=12, pady=8)
 
     def _toggle_appearance(self) -> None:
-        """Apply the theme selected by the switch.
+        """Change appearance across every page and line-number gutter.
 
         Args:
             None.
@@ -157,141 +172,555 @@ class MainWindow(ctk.CTk):
         UIAssets.set_dark_mode(bool(self.appearance_switch.get()))
 
     def _build_sidebar(self) -> None:
-        """Show project identity and the host's detected language tools.
+        """Create persistent, collapsible navigation with active blue states.
 
         Args:
             None.
         Returns:
             None.
         """
-        self.div3_sidebar_1 = self._frame(2, 0, 7, 1)
-        ctk.CTkLabel(self.div3_sidebar_1, text="GROUP 4\n\nPPL\nCOMPARISON",
-                     **UIAssets.label_kwargs("label")).pack(padx=8, pady=16)
-        for language, path in runtime_paths().items():
-            ctk.CTkLabel(self.div3_sidebar_1,
-                         text=f"{language.upper()}\n{'Detected' if path else 'Missing'}",
-                         wraplength=90, **UIAssets.label_kwargs("label")).pack(padx=6, pady=12)
-        ctk.CTkLabel(self.div3_sidebar_1, text="Source\n↓\nTokens\n↓\nStructure\n↓\nExecution\n↓\nComparison",
-                     **UIAssets.label_kwargs("label")).pack(padx=8, pady=24)
+        self.sidebar = ctk.CTkFrame(
+            self,
+            width=UIAssets.SIDEBAR_WIDTH,
+            fg_color=UIAssets.COLORS["SURFACE"],
+            corner_radius=UIAssets.SHELL_RADIUS,
+        )
+        self.sidebar.grid(row=1, column=0, sticky="nsew", pady=(1, 0))
+        self.sidebar.grid_propagate(False)
+        self.sidebar.grid_columnconfigure(0, weight=1)
+        self.sidebar.grid_rowconfigure(6, weight=1)
+        self.sidebar_brand = ctk.CTkLabel(
+            self.sidebar, text="DIAGNOSTICS", **UIAssets.label_kwargs("label")
+        )
+        self.sidebar_brand.grid(row=0, column=0, sticky="w", padx=20, pady=(22, 12))
+        self.sidebar_toggle = ctk.CTkButton(
+            self.sidebar,
+            text="‹   Collapse sidebar",
+            height=32,
+            width=40,
+            command=self._toggle_sidebar,
+            **UIAssets.button_kwargs("quiet"),
+        )
+        self.sidebar_toggle.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 16))
+        for row, (page, short) in enumerate(
+            (("workspace", "W"), ("lessons", "D"), ("reports", "R")), start=2
+        ):
+            button = ctk.CTkButton(
+                self.sidebar,
+                text=f"{short}    {self.PAGE_TITLES[page]}",
+                anchor="w",
+                height=42,
+                width=40,
+                command=lambda target=page: self._show_page(target),
+                **UIAssets.button_kwargs("quiet"),
+            )
+            button.grid(row=row, column=0, sticky="ew", padx=12, pady=3)
+            self.nav_buttons[page] = (button, short)
+        self.runtime_label = ctk.CTkLabel(
+            self.sidebar,
+            text="LOCAL TOOLCHAINS\n\n"
+            + "\n".join(
+                f"{label}: {'detected' if runtime_paths()[language] else 'missing'}"
+                for label, language in LANGUAGE_LABELS.items()
+            ),
+            justify="left",
+            anchor="w",
+            font=UIAssets.FONTS["LABEL"],
+            text_color=UIAssets.COLORS["TEXT_MUTED"],
+        )
+        self.runtime_label.grid(row=7, column=0, sticky="w", padx=20, pady=18)
+        guide = ctk.CTkButton(
+            self.sidebar,
+            text="?    Presentation guide",
+            anchor="w",
+            height=42,
+            width=40,
+            command=lambda: self._show_page("guide"),
+            **UIAssets.button_kwargs("quiet"),
+        )
+        guide.grid(row=8, column=0, sticky="ew", padx=12, pady=(0, 20))
+        self.nav_buttons["guide"] = (guide, "?")
+
+    def _toggle_sidebar(self) -> None:
+        """Collapse navigation without recreating pages or losing editor state.
+
+        Args:
+            None.
+        Returns:
+            None.
+        """
+        self.sidebar_expanded = not self.sidebar_expanded
+        self.sidebar.configure(
+            width=(
+                UIAssets.SIDEBAR_WIDTH
+                if self.sidebar_expanded
+                else UIAssets.SIDEBAR_COLLAPSED
+            )
+        )
+        self.sidebar_toggle.configure(
+            text="‹   Collapse sidebar" if self.sidebar_expanded else "›"
+        )
+        self.sidebar_brand.configure(
+            text="DIAGNOSTICS" if self.sidebar_expanded else "PPL"
+        )
+        self.sidebar_brand.grid_configure(padx=20 if self.sidebar_expanded else 16)
+        if self.sidebar_expanded:
+            self.runtime_label.grid()
+        else:
+            self.runtime_label.grid_remove()
+        for page, (button, short) in self.nav_buttons.items():
+            button.configure(
+                text=(
+                    f"{short}    {self.PAGE_TITLES[page]}"
+                    if self.sidebar_expanded
+                    else short
+                ),
+                anchor="w" if self.sidebar_expanded else "center",
+            )
+
+    def _show_page(self, page: str) -> None:
+        """Raise a persistent content page and update the active navigation.
+
+        Args:
+            page: Key in PAGE_TITLES.
+        Returns:
+            None.
+        """
+        self.active_page = page
+        for key, frame in self.pages.items():
+            if key == page:
+                frame.grid()
+            else:
+                frame.grid_remove()
+        self.page_label.configure(text=self.PAGE_TITLES[page])
+        for key, (button, _) in self.nav_buttons.items():
+            active = key == page
+            button.configure(
+                fg_color=UIAssets.COLORS["BLUE" if active else "SURFACE"],
+                hover_color=UIAssets.COLORS["BLUE_PRESSED" if active else "TINT_BLUE"],
+                text_color=UIAssets.COLORS[
+                    "TEXT_ON_ACCENT" if active else "TEXT_MUTED"
+                ],
+            )
+        if page == "reports":
+            self._refresh_report_page()
+
+    def _new_page(self, key: str):
+        """Allocate a page in the common content area.
+
+        Args:
+            key: Navigation key identifying the page.
+        Returns:
+            A page frame that is retained when another page is shown.
+        """
+        page = ctk.CTkFrame(self.content_area, fg_color="transparent")
+        page.grid(row=0, column=0, sticky="nsew")
+        page.grid_columnconfigure(0, weight=1)
+        self.pages[key] = page
+        return page
+
+    def _heading(self, parent, title: str, subtitle: str) -> None:
+        """Add a page title and a short explanatory subtitle.
+
+        Args:
+            parent: Page frame with an unused row zero.
+            title: Page title.
+            subtitle: Supporting description.
+        Returns:
+            None.
+        """
+        heading = ctk.CTkFrame(parent, fg_color="transparent")
+        heading.grid(row=0, column=0, sticky="ew", pady=(0, 14))
+        ctk.CTkLabel(heading, text=title, **UIAssets.label_kwargs("h1")).pack(
+            anchor="w"
+        )
+        ctk.CTkLabel(
+            heading,
+            text=subtitle,
+            font=UIAssets.FONTS["BODY"],
+            text_color=UIAssets.COLORS["TEXT_MUTED"],
+        ).pack(anchor="w", pady=(4, 0))
+
+    def _build_workspace(self, language_a: str, language_b: str) -> None:
+        """Compose the controls, two editors, shared input, and result card.
+
+        Args:
+            language_a: First editor's initial language label.
+            language_b: Second editor's initial language label.
+        Returns:
+            None.
+        """
+        self.workspace = self._new_page("workspace")
+        self.workspace.grid_rowconfigure(2, weight=3)
+        self.workspace.grid_rowconfigure(4, weight=2)
+        self._heading(
+            self.workspace,
+            "Comparison workspace",
+            "One idea, two implementations. Inspect the source and compare what happens.",
+        )
+        self._build_tools()
+        editor_row = ctk.CTkFrame(self.workspace, fg_color="transparent")
+        editor_row.grid(row=2, column=0, sticky="nsew", pady=12)
+        editor_row.grid_columnconfigure((0, 1), weight=1, uniform="editors")
+        editor_row.grid_rowconfigure(0, weight=1)
+        self._build_editor(editor_row, "A", 0, language_a)
+        self._build_editor(editor_row, "B", 1, language_b)
+        input_row = ctk.CTkFrame(self.workspace, **UIAssets.frame_kwargs())
+        input_row.grid(row=3, column=0, sticky="ew", pady=(0, 12))
+        input_row.grid_columnconfigure(0, weight=1)
+        input_row.grid_columnconfigure(1, weight=2)
+        ctk.CTkLabel(
+            input_row, text="STANDARD INPUT", **UIAssets.label_kwargs("label")
+        ).grid(row=0, column=0, padx=12, pady=(8, 0), sticky="w")
+        ctk.CTkLabel(
+            input_row, text="LESSON NOTES", **UIAssets.label_kwargs("label")
+        ).grid(row=0, column=1, padx=12, pady=(8, 0), sticky="w")
+        self.stdin_box = ctk.CTkTextbox(
+            input_row, height=48, **UIAssets.textbox_kwargs()
+        )
+        self.stdin_box.grid(row=1, column=0, sticky="ew", padx=12, pady=(4, 10))
+        self.stdin_box.bind(
+            "<<Modified>>", lambda event: self._text_modified(self.stdin_box)
+        )
+        self.controls.append(self.stdin_box)
+        self.lesson_text = ctk.CTkTextbox(
+            input_row, height=48, wrap="word", **UIAssets.textbox_kwargs()
+        )
+        self.lesson_text.configure(font=UIAssets.FONTS["BODY"], border_width=0)
+        self.lesson_text.grid(row=1, column=1, sticky="ew", padx=12, pady=(4, 10))
+        self._build_results()
 
     def _build_tools(self) -> None:
-        """Populate the tools panel with lesson, input, and execution controls.
+        """Provide compact lesson, timeout, and execution controls in one card.
 
         Args:
             None.
         Returns:
             None.
         """
-        self.div8_tools_sidebar = ctk.CTkScrollableFrame(self, **UIAssets.frame_kwargs())
-        self.div8_tools_sidebar.grid(row=3, column=1, rowspan=6, columnspan=2,
-                                    sticky="nsew", padx=1, pady=1)
-        parent = self.div8_tools_sidebar
-        ctk.CTkLabel(parent, text="DEMONSTRATIONS", **UIAssets.label_kwargs("h2")).pack(padx=8, pady=(12, 6))
-        self.lesson_menu = ctk.CTkOptionMenu(parent, values=list(LESSONS), **UIAssets.option_menu_kwargs())
-        self.lesson_menu.pack(fill="x", padx=8, pady=4)
+        bar = ctk.CTkFrame(self.workspace, **UIAssets.frame_kwargs())
+        bar.grid(row=1, column=0, sticky="ew")
+        bar.grid_columnconfigure(2, weight=1)
+        self.lesson_menu = ctk.CTkOptionMenu(
+            bar, values=list(LESSONS), width=180, **UIAssets.option_menu_kwargs()
+        )
+        self.lesson_menu.grid(row=0, column=0, padx=(12, 8), pady=10)
         self.controls.append(self.lesson_menu)
-        self.load_button = self._button(parent, "Load lesson into both editors", self._load_lesson)
-        self.lesson_text = ctk.CTkTextbox(parent, height=150, wrap="word", **UIAssets.textbox_kwargs())
-        self.lesson_text.pack(fill="x", padx=8, pady=6)
-        ctk.CTkLabel(parent, text="Shared standard input", **UIAssets.label_kwargs("label")).pack(padx=8, anchor="w")
-        self.stdin_box = ctk.CTkTextbox(parent, height=60, **UIAssets.textbox_kwargs())
-        self.stdin_box.pack(fill="x", padx=8, pady=4)
-        self.stdin_box.bind("<<Modified>>", lambda event: self._text_modified(self.stdin_box))
-        self.controls.append(self.stdin_box)
-        ctk.CTkLabel(parent, text="Execution timeout (seconds)", **UIAssets.label_kwargs("label")).pack(padx=8, anchor="w")
-        self.timeout_menu = ctk.CTkOptionMenu(parent, values=["1", "2", "5", "10"],
-                                             command=self._edited, **UIAssets.option_menu_kwargs())
+        self.load_button = self._action(
+            bar, "Load lesson", self._load_lesson, 1, "secondary", 100
+        )
+        timeout = ctk.CTkFrame(bar, fg_color="transparent")
+        timeout.grid(row=0, column=2, padx=8, sticky="w")
+        ctk.CTkLabel(timeout, text="Limit (s)", **UIAssets.label_kwargs("label")).pack(
+            side="left", padx=(0, 6)
+        )
+        self.timeout_menu = ctk.CTkOptionMenu(
+            timeout,
+            values=["1", "2", "5", "10"],
+            width=58,
+            command=self._edited,
+            **UIAssets.option_menu_kwargs(),
+        )
         self.timeout_menu.set("5")
-        self.timeout_menu.pack(fill="x", padx=8, pady=4)
+        self.timeout_menu.pack(side="left")
         self.controls.append(self.timeout_menu)
-        self.analyze_button = self._button(parent, "Analyze only", lambda: self._start(False))
-        self.run_button = self._button(parent, "Run comparison", lambda: self._start(True), "success")
-        self.stop_button = self._button(parent, "Stop", self._stop, "danger", managed=False)
+        self.analyze_button = self._action(
+            bar, "Analyze only", lambda: self._start(False), 3, "secondary", 108
+        )
+        self.run_button = self._action(
+            bar, "Run comparison", lambda: self._start(True), 4, "primary", 138
+        )
+        self.stop_button = self._action(
+            bar, "Stop", self._stop, 5, "danger", 58, managed=False
+        )
         self.stop_button.configure(state="disabled")
-        self.export_button = self._button(parent, "Export report…", self._export, managed=False)
-        self.export_button.configure(state="disabled")
-        ctk.CTkLabel(parent, text="Run trusted classroom code only.\nProcess isolation is not a security sandbox.",
-                     wraplength=210, **UIAssets.label_kwargs("label")).pack(padx=8, pady=10)
 
-    def _button(self, parent, text: str, command, variant: str = "primary", managed: bool = True):
-        """Build a themed tools button, optionally disabled during execution.
+    def _action(
+        self,
+        parent,
+        text: str,
+        command,
+        column: int,
+        variant: str,
+        width: int,
+        managed: bool = True,
+    ):
+        """Create a toolbar action and register execution-disabled controls.
 
         Args:
-            parent: Widget container.
-            text: Button label.
+            parent: Toolbar container.
+            text: Action label.
             command: Click callback.
-            variant: Design-token action color.
-            managed: Whether execution should disable this control.
+            column: Grid column.
+            variant: Shared button style.
+            width: Requested button width.
+            managed: Disable this action while a worker is active.
         Returns:
-            The button widget.
+            The new button.
         """
-        button = ctk.CTkButton(parent, text=text, command=command, **UIAssets.button_kwargs(variant))
-        button.pack(fill="x", padx=8, pady=4)
+        button = ctk.CTkButton(
+            parent,
+            text=text,
+            width=width,
+            height=32,
+            command=command,
+            **UIAssets.button_kwargs(variant),
+        )
+        button.grid(row=0, column=column, padx=(0, 8), pady=10)
         if managed:
             self.controls.append(button)
         return button
 
-    def _build_editor(self, label: str, column: int, language: str) -> None:
-        """Build a source editor and independent language/file controls.
+    def _build_editor(self, parent, label: str, column: int, language: str) -> None:
+        """Build one source card with language selector and existing gutter.
 
         Args:
+            parent: Two-column editor container.
             label: A or B.
-            column: Starting root grid column.
-            language: Initial display label selected in the launcher.
+            column: Column in the editor container.
+            language: Initial display label.
         Returns:
             None.
         """
-        panel = self._frame(3, column, 4, 3)
-        setattr(self, f"div{4 if label == 'A' else 5}_editor_{label.lower()}", panel)
+        panel = ctk.CTkFrame(parent, **UIAssets.frame_kwargs())
+        panel.grid(
+            row=0, column=column, sticky="nsew", padx=(0, 6) if column == 0 else (6, 0)
+        )
         panel.grid_columnconfigure(0, weight=1)
         panel.grid_rowconfigure(1, weight=1)
-        toolbar = ctk.CTkFrame(panel, **UIAssets.frame_kwargs(border=False))
-        toolbar.grid(row=0, column=0, sticky="ew", padx=8, pady=8)
+        toolbar = ctk.CTkFrame(panel, fg_color="transparent")
+        toolbar.grid(row=0, column=0, sticky="ew", padx=12, pady=10)
         toolbar.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(toolbar, text=f"SNIPPET {label}", **UIAssets.label_kwargs("label")).grid(row=0, column=0, padx=(0, 8))
-        menu = ctk.CTkOptionMenu(toolbar, values=list(LANGUAGE_LABELS), width=120,
-                                command=self._edited, **UIAssets.option_menu_kwargs())
+        ctk.CTkLabel(
+            toolbar, text=f"Snippet {label}", **UIAssets.label_kwargs("h3")
+        ).grid(row=0, column=0, padx=(0, 12))
+        menu = ctk.CTkOptionMenu(
+            toolbar,
+            values=list(LANGUAGE_LABELS),
+            width=120,
+            command=self._edited,
+            **UIAssets.option_menu_kwargs(),
+        )
         menu.set(language if language in LANGUAGE_LABELS else "Python")
         menu.grid(row=0, column=1, sticky="w")
         index = len(self.editors)
-        open_button = ctk.CTkButton(toolbar, text="Open…", width=64,
-                                    command=lambda: self._open_source(index), **UIAssets.button_kwargs())
-        open_button.grid(row=0, column=2, padx=(8, 0))
-        # Keep the gutter beside the editor, outside its source text and scroll
-        # region. Each editor owns its own gutter and scroll notifications.
+        open_button = ctk.CTkButton(
+            toolbar,
+            text="Open…",
+            width=64,
+            command=lambda: self._open_source(index),
+            **UIAssets.button_kwargs("quiet"),
+        )
+        open_button.grid(row=0, column=2, padx=(6, 0))
         editor_area = ctk.CTkFrame(panel, **UIAssets.frame_kwargs(border=False))
-        editor_area.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        editor_area.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
         editor_area.grid_columnconfigure(1, weight=1)
         editor_area.grid_rowconfigure(0, weight=1)
-        editor = ctk.CTkTextbox(editor_area, wrap="none", height=240, undo=True, **UIAssets.textbox_kwargs())
+        editor = ctk.CTkTextbox(
+            editor_area, wrap="none", height=140, undo=True, **UIAssets.textbox_kwargs()
+        )
+        editor.configure(border_width=0)
         editor.grid(row=0, column=1, sticky="nsew")
         gutter = LineNumberGutter(editor_area, editor)
         gutter.grid(row=0, column=0, sticky="ns")
-        self.line_gutters.append(gutter)
         editor.bind("<<Modified>>", lambda event: self._text_modified(editor))
         self.editors.append(editor)
+        self.line_gutters.append(gutter)
         self.language_menus.append(menu)
         self.controls.extend([editor, menu, open_button])
 
     def _build_results(self) -> None:
-        """Build aligned, scrollable result columns below both editors.
+        """Place view tabs and two output columns inside one result card.
 
         Args:
             None.
         Returns:
             None.
         """
-        self.div6_results = self._frame(7, 3, 2, 6)
-        self.div6_results.grid_rowconfigure(1, weight=1)
+        card = ctk.CTkFrame(self.workspace, **UIAssets.frame_kwargs())
+        card.grid(row=4, column=0, sticky="nsew")
+        card.grid_columnconfigure((0, 1), weight=1, uniform="results")
+        card.grid_rowconfigure(2, weight=1)
+        header = ctk.CTkFrame(card, fg_color="transparent")
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=12, pady=(10, 4))
+        header.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            header, text="Results & insights", **UIAssets.label_kwargs("h2")
+        ).grid(row=0, column=0, sticky="w")
+        # Separate buttons allow white selected text and dark inactive text in
+        # light mode; a single shared text color would lose contrast on blue.
+        self.tab_strip = ctk.CTkFrame(header, fg_color="transparent")
+        self.tab_strip.grid(row=0, column=1)
+        self.view_buttons = {}
+        for index, view in enumerate(self.HEADER_TABS):
+            button = ctk.CTkButton(
+                self.tab_strip,
+                text=view,
+                width=105,
+                height=28,
+                command=lambda selected=view: self._change_view(selected),
+                **UIAssets.button_kwargs("quiet"),
+            )
+            button.grid(row=0, column=index, padx=(4, 0))
+            self.view_buttons[view] = button
+        self._change_view(self.active_view)
+        self.summary_label = ctk.CTkLabel(
+            card,
+            text="",
+            anchor="w",
+            font=UIAssets.FONTS["LABEL"],
+            text_color=UIAssets.COLORS["TEXT_MUTED"],
+        )
+        self.summary_label.grid(
+            row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 6)
+        )
         for index in range(2):
-            self.div6_results.grid_columnconfigure(index, weight=1, uniform="results")
-            ctk.CTkLabel(self.div6_results, text=f"RESULT {'AB'[index]}",
-                         **UIAssets.label_kwargs("label")).grid(row=0, column=index, sticky="w", padx=8, pady=4)
-            textbox = ctk.CTkTextbox(self.div6_results, wrap="word", height=210,
-                                    **UIAssets.textbox_kwargs())
-            textbox.grid(row=1, column=index, sticky="nsew", padx=8, pady=(0, 8))
+            textbox = ctk.CTkTextbox(
+                card, height=118, wrap="word", **UIAssets.textbox_kwargs()
+            )
+            textbox.configure(border_width=0)
+            textbox.grid(row=2, column=index, sticky="nsew", padx=10, pady=(0, 10))
             self.results.append(textbox)
-            self._set_text(textbox, "Load or enter source, then Analyze only or Run comparison.", readonly=True)
+
+    def _build_library(self) -> None:
+        """Build role-card-inspired lesson choices with actual load actions.
+
+        Args:
+            None.
+        Returns:
+            None.
+        """
+        page = self._new_page("lessons")
+        self._heading(
+            page,
+            "Demonstrations",
+            "Choose a concept. Load its examples into your selected languages.",
+        )
+        page.grid_rowconfigure(1, weight=1)
+        library = ctk.CTkScrollableFrame(page, fg_color="transparent")
+        library.grid(row=1, column=0, sticky="nsew")
+        library.grid_columnconfigure((0, 1), weight=1, uniform="lessons")
+        self.lesson_cards = {}
+        for index, (name, lesson) in enumerate(LESSONS.items()):
+            card = ctk.CTkFrame(library, **UIAssets.frame_kwargs())
+            card.grid(row=index // 2, column=index % 2, sticky="nsew", padx=6, pady=6)
+            color = ("BLUE", "GREEN", "YELLOW", "RED")[index % 4]
+            ctk.CTkLabel(
+                card,
+                text=f"{index + 1:02}",
+                width=36,
+                height=32,
+                corner_radius=UIAssets.CORNER_RADIUS,
+                fg_color=UIAssets.COLORS[f"TINT_{color}"],
+                font=UIAssets.FONTS["H3"],
+                text_color=UIAssets.COLORS["TEXT_PRIMARY"],
+            ).pack(anchor="w", padx=18, pady=(18, 12))
+            ctk.CTkLabel(card, text=name, **UIAssets.label_kwargs("h2")).pack(
+                anchor="w", padx=18
+            )
+            ctk.CTkLabel(
+                card,
+                text=lesson["concept"],
+                wraplength=340,
+                justify="left",
+                anchor="w",
+                font=UIAssets.FONTS["BODY"],
+                text_color=UIAssets.COLORS["TEXT_MUTED"],
+            ).pack(fill="x", padx=18, pady=(6, 14))
+            button = ctk.CTkButton(
+                card,
+                text="Load demonstration   →",
+                height=34,
+                command=lambda selected=name: self._select_lesson(selected),
+                **UIAssets.button_kwargs("secondary"),
+            )
+            button.pack(fill="x", padx=18, pady=(0, 18))
+            self.controls.append(button)
+            self.lesson_cards[name] = button
+
+    def _select_lesson(self, name: str) -> None:
+        """Load a library choice into the workspace without executing it.
+
+        Args:
+            name: Key in LESSONS.
+        Returns:
+            None.
+        """
+        if self.busy:
+            return
+        self.lesson_menu.set(name)
+        self._load_lesson()
+        self._show_page("workspace")
+
+    def _build_reports(self) -> None:
+        """Create the current-snapshot report page with an honest empty state.
+
+        Args:
+            None.
+        Returns:
+            None.
+        """
+        page = self._new_page("reports")
+        self._heading(
+            page,
+            "Comparison report",
+            "Review the latest source and input snapshot. Export it as Markdown or JSON.",
+        )
+        page.grid_rowconfigure(1, weight=1)
+        self.report_preview = ctk.CTkTextbox(
+            page, wrap="word", **UIAssets.textbox_kwargs()
+        )
+        self.report_preview.grid(row=1, column=0, sticky="nsew")
+        self._refresh_report_page()
+
+    def _refresh_report_page(self) -> None:
+        """Show the current report or explain why no current evidence exists.
+
+        Args:
+            None.
+        Returns:
+            None.
+        """
+        if not hasattr(self, "report_preview"):
+            return
+        if self.busy:
+            text = "A comparison is in progress. Its report will appear when processing finishes."
+        elif self.report is None:
+            text = "No comparison report yet.\n\nOpen Workspace and choose Analyze only or Run comparison.\n\nEditing source or input clears the previous report to keep the evidence current."
+        else:
+            text = render_report(self.report)
+        self._set_text(self.report_preview, text, readonly=True)
+
+    def _build_guide(self) -> None:
+        """Expose concise demo instructions and analysis limits inside the app.
+
+        Args:
+            None.
+        Returns:
+            None.
+        """
+        page = self._new_page("guide")
+        self._heading(
+            page,
+            "Ready to present",
+            "A short route through the concepts, evidence, and limitations.",
+        )
+        page.grid_rowconfigure(1, weight=1)
+        guide = ctk.CTkTextbox(page, wrap="word", **UIAssets.textbox_kwargs())
+        guide.configure(font=UIAssets.FONTS["BODY"])
+        guide.grid(row=1, column=0, sticky="nsew")
+        self._set_text(
+            guide,
+            "01  START WITH RECURSION\nLoad Recursion, run both snippets, and explain the base case. Both should print 120.\n\n"
+            "02  COMPARE THE EVIDENCE\nStatic AST shows structure. Runtime shows stdout and diagnostics. PPL Verdict connects observations to language concepts.\n\n"
+            "03  CHANGE THE LANGUAGE\nSelect Python and JavaScript, then load Types and coercion. Python raises an error while JavaScript prints 52. Change B to C++, reload the lesson, and show the compile error.\n\n"
+            "04  DEMONSTRATE INPUT AND RECOVERY\nInput and validation prints 49 for 7 and handles abc. Timeout and Stop demonstrate recovery.\n\n"
+            "05  SAVE YOUR RESULTS\nReports contains the latest comparison. Export report saves source, stdin, diagnostics, and all three views.\n\n"
+            "KEEP THE CLAIMS PRECISE\nPython uses a real tokenizer and AST. JavaScript/C++ structural analysis is approximate; Run invokes their actual toolchains. Equal stdout on one input does not prove equivalence. Startup timings are not language benchmarks.\n\n"
+            "LOCAL EXECUTION\nRun trusted classroom code only. Process limits are not a filesystem or network security sandbox.\n\n"
+            "SHORTCUT\nCtrl/⌘ + Enter runs the current pair. Changing language preserves your source; Load lesson intentionally replaces both editors and stdin.",
+            readonly=True,
+        )
 
     @staticmethod
     def _set_text(widget, text: str, readonly: bool = False) -> None:
@@ -325,9 +754,15 @@ class MainWindow(ctk.CTk):
         for editor, menu in zip(self.editors, self.language_menus):
             self._set_text(editor, lesson["sources"][LANGUAGE_LABELS[menu.get()]])
         self._set_text(self.stdin_box, lesson["stdin"])
-        self._set_text(self.lesson_text, lesson["concept"] + "\n\n" + lesson["explanation"], readonly=True)
+        self._set_text(
+            self.lesson_text,
+            lesson["concept"] + "\n\n" + lesson["explanation"],
+            readonly=True,
+        )
         self._edited()
-        self.status_label.configure(text=f"Loaded {self.lesson_menu.get()}. Edit either snippet, analyze, or run. Ctrl/⌘ + Enter runs both.")
+        self.status_label.configure(
+            text=f"Loaded {self.lesson_menu.get()}. Edit either snippet, analyze, or run. Ctrl/⌘ + Enter runs both."
+        )
 
     def _text_modified(self, widget) -> None:
         """Invalidate results after typing, paste, cut, undo, or redo.
@@ -352,10 +787,17 @@ class MainWindow(ctk.CTk):
         if self.busy:
             return
         self.report = None
+        self._refresh_report_page()
         self.export_button.configure(state="disabled")
-        self.summary_label.configure(text="Source/input changed — analyze or run to refresh results.")
+        self.summary_label.configure(
+            text="Source/input changed — analyze or run to refresh results."
+        )
         for textbox in self.results:
-            self._set_text(textbox, "Results cleared. Analyze or run the current source and input.", readonly=True)
+            self._set_text(
+                textbox,
+                "Results cleared. Analyze or run the current source and input.",
+                readonly=True,
+            )
 
     def _start(self, run: bool) -> None:
         """Snapshot widgets and launch a single background comparison worker.
@@ -369,27 +811,42 @@ class MainWindow(ctk.CTk):
             return
         sources = [editor.get("1.0", "end-1c") for editor in self.editors]
         if any(len(source) > 100_000 for source in sources):
-            messagebox.showerror("Source too large", "Use snippets of at most 100,000 characters.", parent=self)
+            messagebox.showerror(
+                "Source too large",
+                "Use snippets of at most 100,000 characters.",
+                parent=self,
+            )
             return
         languages = [LANGUAGE_LABELS[menu.get()] for menu in self.language_menus]
         stdin = self.stdin_box.get("1.0", "end-1c")
         timeout = float(self.timeout_menu.get())
         self.busy = True
+        self._refresh_report_page()
         self.cancel_event.clear()
         for control in self.controls:
             control.configure(state="disabled")
         self.stop_button.configure(state="normal")
         self.export_button.configure(state="disabled")
-        self.summary_label.configure(text="Running comparison…" if run else "Analyzing source…")
-        self.status_label.configure(text="Working — C++ compilation has a separate budget. Stop cancels the current run.")
+        self.summary_label.configure(
+            text="Running comparison…" if run else "Analyzing source…"
+        )
+        self.status_label.configure(
+            text="Working — C++ compilation has a separate budget. Stop cancels the current run."
+        )
         for textbox in self.results:
             self._set_text(textbox, "Processing current snapshot…", readonly=True)
         # Keep the worker alive briefly after window close so its cancellation
         # handler can reap the child process before Python exits.
-        threading.Thread(target=self._work, args=(sources, languages, stdin, timeout, run), daemon=False).start()
+        threading.Thread(
+            target=self._work,
+            args=(sources, languages, stdin, timeout, run),
+            daemon=False,
+        ).start()
         self.poll_id = self.after(50, self._poll)
 
-    def _work(self, sources: list, languages: list, stdin: str, timeout: float, run: bool) -> None:
+    def _work(
+        self, sources: list, languages: list, stdin: str, timeout: float, run: bool
+    ) -> None:
         """Compute a report without accessing any Tk objects.
 
         Args:
@@ -402,8 +859,16 @@ class MainWindow(ctk.CTk):
             None; success or error is sent through the thread-safe queue.
         """
         try:
-            report = compare_snippets(sources[0], languages[0], sources[1], languages[1],
-                                      stdin, timeout, run, self.cancel_event)
+            report = compare_snippets(
+                sources[0],
+                languages[0],
+                sources[1],
+                languages[1],
+                stdin,
+                timeout,
+                run,
+                self.cancel_event,
+            )
             self.messages.put((report, None))
         except Exception as exc:
             # The UI boundary must restore controls even after unexpected
@@ -429,16 +894,28 @@ class MainWindow(ctk.CTk):
             control.configure(state="normal")
         self.stop_button.configure(state="disabled")
         self.report = report
+        self._refresh_report_page()
         if error:
-            self.summary_label.configure(text="Comparison failed — see diagnostic below.")
+            self.summary_label.configure(
+                text="Comparison failed — see diagnostic below."
+            )
             for textbox in self.results:
                 self._set_text(textbox, error, readonly=True)
-            self.status_label.configure(text="Ready to retry after correcting the source or environment.")
+            self.status_label.configure(
+                text="Ready to retry after correcting the source or environment."
+            )
             return
         self.export_button.configure(state="normal")
-        states = [item["execution"]["status"] if item["execution"] else "analyzed" for item in report["snippets"]]
-        self.summary_label.configure(text=f"A: {states[0]}    |    B: {states[1]}    |    Open PPL Verdict for the comparison.")
-        self.status_label.configure(text="Comparison complete. Results and exports describe this source/input snapshot.")
+        states = [
+            item["execution"]["status"] if item["execution"] else "analyzed"
+            for item in report["snippets"]
+        ]
+        self.summary_label.configure(
+            text=f"A: {states[0]}    |    B: {states[1]}    |    Open PPL Verdict for the comparison."
+        )
+        self.status_label.configure(
+            text="Comparison complete. Results and exports describe this source/input snapshot."
+        )
         self._change_view(self.active_view)
 
     def _change_view(self, view: str) -> None:
@@ -450,9 +927,22 @@ class MainWindow(ctk.CTk):
             None.
         """
         self.active_view = view
+        for key, button in self.view_buttons.items():
+            active = key == view
+            button.configure(
+                fg_color=UIAssets.COLORS["BLUE" if active else "TINT_NEUTRAL_A"],
+                hover_color=UIAssets.COLORS[
+                    "BLUE_PRESSED" if active else "TINT_NEUTRAL_B"
+                ],
+                text_color=UIAssets.COLORS[
+                    "TEXT_ON_ACCENT" if active else "TEXT_PRIMARY"
+                ],
+            )
         if self.report and not self.busy:
             for index, textbox in enumerate(self.results):
-                self._set_text(textbox, render_view(self.report, index, view), readonly=True)
+                self._set_text(
+                    textbox, render_view(self.report, index, view), readonly=True
+                )
 
     def _stop(self) -> None:
         """Signal the worker to stop its process and skip further execution.
@@ -474,8 +964,14 @@ class MainWindow(ctk.CTk):
         Returns:
             None. File errors are shown as recoverable dialogs.
         """
-        path = filedialog.askopenfilename(parent=self, title=f"Open snippet {'AB'[index]}",
-                                          filetypes=[("Source files", "*.py *.js *.cpp *.cc *.cxx"), ("All files", "*")])
+        path = filedialog.askopenfilename(
+            parent=self,
+            title=f"Open snippet {'AB'[index]}",
+            filetypes=[
+                ("Source files", "*.py *.js *.cpp *.cc *.cxx"),
+                ("All files", "*"),
+            ],
+        )
         if not path:
             return
         try:
@@ -486,7 +982,13 @@ class MainWindow(ctk.CTk):
             if len(text) > 100_000:
                 raise ValueError("Use at most 100,000 source characters.")
             self._set_text(self.editors[index], text)
-            language = {".py": "Python", ".js": "JavaScript", ".cpp": "C++", ".cc": "C++", ".cxx": "C++"}.get(source_path.suffix.lower())
+            language = {
+                ".py": "Python",
+                ".js": "JavaScript",
+                ".cpp": "C++",
+                ".cc": "C++",
+                ".cxx": "C++",
+            }.get(source_path.suffix.lower())
             if language:
                 self.language_menus[index].set(language)
             self._edited()
@@ -503,14 +1005,21 @@ class MainWindow(ctk.CTk):
         """
         if self.report is None or self.busy:
             return
-        path = filedialog.asksaveasfilename(parent=self, title="Export comparison report", defaultextension=".md",
-                                            initialfile="ppl-comparison.md",
-                                            filetypes=[("Markdown", "*.md"), ("JSON", "*.json")])
+        path = filedialog.asksaveasfilename(
+            parent=self,
+            title="Export comparison report",
+            defaultextension=".md",
+            initialfile="ppl-comparison.md",
+            filetypes=[("Markdown", "*.md"), ("JSON", "*.json")],
+        )
         if not path:
             return
         try:
-            text = (json.dumps(self.report, indent=2, ensure_ascii=False) + "\n"
-                    if Path(path).suffix.lower() == ".json" else render_report(self.report))
+            text = (
+                json.dumps(self.report, indent=2, ensure_ascii=False) + "\n"
+                if Path(path).suffix.lower() == ".json"
+                else render_report(self.report)
+            )
             Path(path).write_text(text, encoding="utf-8")
             self.status_label.configure(text=f"Report saved: {path}")
         except OSError as exc:

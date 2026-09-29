@@ -92,7 +92,7 @@ Example: `test: add timeout enforcement case for subprocess runner`
 
 ### UI-Specific Rule: No Hard-Coded Design Values
 
-Every color, font, and corner radius used in `ui/` **must** come from `ui/ui_assets.py` (`UIAssets.COLORS`, `UIAssets.FONTS`, or one of the `*_kwargs()` helpers). Do not hard-code a hex string or a `corner_radius` value directly inside a panel file — if the token you need doesn't exist yet, add it to `ui_assets.py` in your PR rather than inlining it. This is what keeps the flat/boxy look consistent across four people's panels.
+Every color, font, and corner radius used in `ui/` **must** come from `ui/ui_assets.py` (`UIAssets.COLORS`, `UIAssets.FONTS`, or one of the `*_kwargs()` helpers). Do not hard-code a hex string or a `corner_radius` value directly inside a panel file — if the token you need doesn't exist yet, add it to `ui_assets.py` in your PR rather than inlining it. This is what keeps the shared Car Rental-inspired visual language consistent across four people's panels.
 
 ---
 
@@ -105,31 +105,26 @@ Per academic integrity policy, log any AI-assisted work here (or in a shared doc
 | YYYY-MM-DD | e.g. Claude | e.g. "Generate subprocess timeout handler" | e.g. Function with try/except TimeoutExpired | e.g. Adjusted default timeout to 5s | e.g. Matched rubric's error-handling requirement |
 | 2026-09-29 | Codex | Add IDE-style line numbers to Editor A and B | Independent, scroll-aligned canvas gutters | Used shared theme tokens and native line geometry; added GUI checks | Make source lines easier to reference during demonstrations |
 | 2026-09-29 | Codex | Complete the requested code explanations and presentation preparation | Function-level walkthrough and rehearsal guide | Documented actual implementation behavior, limitations, and verified demo paths | Help the team explain and rehearse the application |
+| 2026-09-29 | Codex | Adapt the selected Java Car Rental UI designs to Python | Split launcher, shared palette, collapsible shell, lesson/report/guide pages | Kept the backend and gutters; retained native window controls; extended native GUI checks | Match the user's chosen visual direction without losing the working demo |
 
 ---
 
 ## File Ownership & Task Distribution
 
-> Update this table in your first PR so everyone knows their lane. `div` labels match the grid map documented at the top of `ui/main_window.py`.
+> Assign owners during team review. The user-approved redesign replaces numbered grid divisions with persistent dashboard pages. Central design tokens still apply.
 
 | Module/File | Owner | Status |
 | :--- | :--- | :--- |
-| `main.py` (entry point — launcher → dashboard) | *(assign)* | Not started |
-| `ui/ui_assets.py` (design tokens/theme, light + dark) | *(assign)* | Not started |
-| `ui/launcher_window.py` (entry launcher window) | *(assign)* | Not started |
-| `ui/main_window.py` (grid skeleton) | *(assign)* | Not started |
-| `div1` Header (title, view tabs, dark-mode switch) | *(assign)* | Not started |
-| `div2` Footer | *(assign)* | Not started |
-| `div3` Sidebar 1 | *(assign)* | Not started |
-| `div4` Editor A | *(assign)* | Not started |
-| `div5` Editor B | *(assign)* | Not started |
-| `div6` Results | *(assign)* | Not started |
-| `div7` Analytics Title | *(assign)* | Not started |
-| `div8` Tools Sidebar | *(assign)* | Not started |
-| `core/ast_analyzer.py` | *(assign)* | Not started |
-| `core/execution_runner.py` | *(assign)* | Not started |
-| `tests/test_cases.py` | *(assign)* | Not started |
-| `docs/documentation.md` (11 sections) | *(assign)* | Not started |
+| `main.py` (launcher → dashboard) | *(assign)* | Implemented |
+| `ui/ui_assets.py` (shared theme and styles) | *(assign)* | Implemented |
+| `ui/launcher_window.py` (split welcome/setup screen) | *(assign)* | Implemented |
+| `ui/main_window.py` (shell, navigation, workspace, lessons, reports, guide) | *(assign)* | Implemented |
+| `ui/line_numbers.py` (editor gutters) | *(assign)* | Implemented |
+| `core/ast_analyzer.py` | *(assign)* | Implemented; documented heuristic limits |
+| `core/execution_runner.py` | *(assign)* | Implemented |
+| `core/comparison.py` / `core/examples.py` | *(assign)* | Implemented |
+| `tests/test_cases.py` / `tests/gui_smoke.py` | *(assign)* | Automated checks available |
+| `docs/` | *(assign)* | Written; team review before submission |
 
 ---
 
