@@ -33,7 +33,7 @@ Choose a lesson, click **Load lesson into both editors**, then **Run comparison*
 
 ## What works
 
-- Two independent source editors with language selectors and UTF-8 file loading.
+- Two independent source editors with line numbers, language selectors, and UTF-8 file loading. Gutters stay aligned while editing and scrolling.
 - Nine lessons: recursion, iteration, lexical scope, types/coercion, parameter passing, input validation, syntax errors, runtime errors, and timeouts.
 - Python tokenization, AST display, structural metrics, and syntax/context validation without execution.
 - Clearly labeled approximate structural analysis for JavaScript and C++.

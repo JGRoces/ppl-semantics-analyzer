@@ -19,6 +19,7 @@ import customtkinter as ctk
 from core.comparison import compare_snippets, render_report, render_view
 from core.examples import LANGUAGE_LABELS, LESSONS
 from core.execution_runner import runtime_paths
+from ui.line_numbers import LineNumberGutter
 from ui.ui_assets import UIAssets
 
 
@@ -55,6 +56,7 @@ class MainWindow(ctk.CTk):
         self.poll_id = None
         self.controls = []
         self.editors = []
+        self.line_gutters = []
         self.language_menus = []
         self.results = []
         self._configure_grid()
@@ -255,8 +257,17 @@ class MainWindow(ctk.CTk):
         open_button = ctk.CTkButton(toolbar, text="Open…", width=64,
                                     command=lambda: self._open_source(index), **UIAssets.button_kwargs())
         open_button.grid(row=0, column=2, padx=(8, 0))
-        editor = ctk.CTkTextbox(panel, wrap="none", height=240, undo=True, **UIAssets.textbox_kwargs())
-        editor.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        # Keep the gutter beside the editor, outside its source text and scroll
+        # region. Each editor owns its own gutter and scroll notifications.
+        editor_area = ctk.CTkFrame(panel, **UIAssets.frame_kwargs(border=False))
+        editor_area.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        editor_area.grid_columnconfigure(1, weight=1)
+        editor_area.grid_rowconfigure(0, weight=1)
+        editor = ctk.CTkTextbox(editor_area, wrap="none", height=240, undo=True, **UIAssets.textbox_kwargs())
+        editor.grid(row=0, column=1, sticky="nsew")
+        gutter = LineNumberGutter(editor_area, editor)
+        gutter.grid(row=0, column=0, sticky="ns")
+        self.line_gutters.append(gutter)
         editor.bind("<<Modified>>", lambda event: self._text_modified(editor))
         self.editors.append(editor)
         self.language_menus.append(menu)

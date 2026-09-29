@@ -50,6 +50,7 @@ class UIAssets:
         "BG_SECONDARY": ("#FFFFFF", "#000000"),
         "SURFACE": ("#FFFFFF", "#0A0A0A"),
         "CODE_BG": ("#FFFFFF", "#000000"),
+        "GUTTER_BG": ("#F2F2F2", "#161616"),
         "BORDER": ("#000000", "#FFFFFF"),
 
         # Text — Black text in Light, White text in Dark

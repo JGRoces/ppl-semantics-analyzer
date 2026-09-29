@@ -103,6 +103,8 @@ Per academic integrity policy, log any AI-assisted work here (or in a shared doc
 | Date | Tool | Prompt (summary) | Output Summary | Modifications Made | Reason |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | YYYY-MM-DD | e.g. Claude | e.g. "Generate subprocess timeout handler" | e.g. Function with try/except TimeoutExpired | e.g. Adjusted default timeout to 5s | e.g. Matched rubric's error-handling requirement |
+| 2026-09-29 | Codex | Add IDE-style line numbers to Editor A and B | Independent, scroll-aligned canvas gutters | Used shared theme tokens and native line geometry; added GUI checks | Make source lines easier to reference during demonstrations |
+| 2026-09-29 | Codex | Complete the requested code explanations and presentation preparation | Function-level walkthrough and rehearsal guide | Documented actual implementation behavior, limitations, and verified demo paths | Help the team explain and rehearse the application |
 
 ---
 

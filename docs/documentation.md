@@ -233,7 +233,7 @@ The first command runs the automated source/runner/comparison tests. The second 
 | Static-only side effect | Source that would create a file | File never created | Passed |
 | Report export | Successful comparison | Original source/input and all views serialized | Passed |
 
-The initial expanded automated run recorded **74 passed, zero skipped**. The native GUI smoke check passed launcher handoff, language/theme preservation, execution, view rendering, file loading, JSON export, error display, cancellation, and recovery. See the final verification note below for any additional regressions added during review.
+The expanded automated run recorded **74 passed, zero skipped**. The native GUI smoke check passed launcher handoff, language/theme preservation, execution, view rendering, file loading, JSON export, error display, cancellation, and recovery. On 2026-09-29 the native check also passed independent editor line numbering, 1,000-line source loading, insertion/deletion, vertical and horizontal scrolling, resizing, and light/dark gutter colors.
 
 Desktop screenshot inspection could not be completed because Computer Use permission was unavailable. Native widget/callback checks verify functionality; the team should confirm projector readability during rehearsal. Only this Mac has been verified.
 
