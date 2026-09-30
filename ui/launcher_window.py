@@ -178,6 +178,11 @@ class LauncherWindow(ctk.CTkFrame):
                 self, "language_a_combo" if column == 0 else "language_b_combo", menu
             )
         self._choose_pair(self.selected_languages)
+        self.clean_start = ctk.BooleanVar(value=False)
+        ctk.CTkSwitch(
+            inner, text="Start with empty editors", variable=self.clean_start,
+            **UIAssets.switch_kwargs(),
+        ).pack(anchor="w", pady=(0, 14))
         ctk.CTkButton(
             inner,
             text="Open workspace",
@@ -284,7 +289,7 @@ class LauncherWindow(ctk.CTkFrame):
             return
         self.result = "start"
         self.master.unbind("<Return>", self.return_binding)
-        self.on_start(self.selected_languages, self.dark_mode)
+        self.on_start(self.selected_languages, self.dark_mode, clean_start=self.clean_start.get())
 
     def _on_cancel(self) -> None:
         """Close without opening a dashboard.

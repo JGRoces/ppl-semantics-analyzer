@@ -49,6 +49,13 @@ class UIAssets:
         "CODE_KEYWORD": "#4ADE80",
         "CODE_VALUE": "#86EFAC",
     }
+    SYNTAX_COLORS = {
+        "keyword": ("#166534", "#4ADE80"),
+        "string": ("#15803D", "#86EFAC"),
+        "comment": ("#6B6B6B", "#A0A0A0"),
+        "number": ("#B91C1C", "#FCA5A5"),
+        "function": ("#1D4ED8", "#93C5FD"),
+    }
     FONTS = {
         "UI_FAMILY": "Segoe UI",
         "MONO_FAMILY": "Consolas",

@@ -40,19 +40,20 @@ class Application(ctk.CTk):
         self.launcher.grid(row=0, column=0, sticky="nsew")
         self.protocol("WM_DELETE_WINDOW", self._close)
 
-    def open_workspace(self, languages: tuple, dark_mode: bool) -> None:
+    def open_workspace(self, languages: tuple, dark_mode: bool, clean_start: bool = False) -> None:
         """Replace entry content while preserving the native window and geometry.
 
         Args:
             languages: The two selected language display labels.
             dark_mode: The current appearance choice, carried into the workspace.
+            clean_start: Open empty editors instead of the initial lesson.
         Returns:
             None. Repeated callbacks do not create duplicate workspaces.
         """
         if self.workspace is not None:
             return
         UIAssets.set_dark_mode(dark_mode)
-        self.workspace = MainWindow(self, *languages, dark_mode=dark_mode)
+        self.workspace = MainWindow(self, *languages, dark_mode=dark_mode, clean_start=clean_start)
         self.workspace.grid(row=0, column=0, sticky="nsew")
         self.workspace.tkraise()
         self.launcher.destroy()

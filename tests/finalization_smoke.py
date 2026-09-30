@@ -1,6 +1,7 @@
 """Opt-in GUI checks: python -m tests.finalization_smoke."""
 
 from pathlib import Path
+import traceback
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -33,7 +34,7 @@ def main() -> None:
     """
     window = Application()
     errors = []
-    window.report_callback_exception = lambda *error: errors.append(error)
+    window.report_callback_exception = lambda *error: errors.append("".join(traceback.format_exception(*error)))
     try:
         window.launcher._on_start()
         window.update()
@@ -47,6 +48,48 @@ def main() -> None:
         assert app.workspace.grid_rowconfigure(3)["weight"] == 2
         assert results_card.winfo_height() > 150
         assert set(LESSON_RESOURCES) == set(LESSONS)
+        original_sources = [editor.get("1.0", "end-1c") for editor in app.editors]
+        app._start(False)
+        assert app.clear_results_button.cget("state") == "disabled"
+        assert app.clear_workspace_button.cget("state") == "disabled"
+        app._clear_workspace()
+        assert [editor.get("1.0", "end-1c") for editor in app.editors] == original_sources
+        wait_until_idle(app)
+        assert app.report is not None
+        app.clear_results_button.invoke()
+        assert app.report is None
+        assert app.export_button.cget("state") == "disabled"
+        assert [editor.get("1.0", "end-1c") for editor in app.editors] == original_sources
+        assert all(not box.get("1.0", "end-1c") for box in app.results)
+        app._select_lesson("Input and validation")
+        assert app.lesson_stdin
+        app.clear_workspace_button.invoke()
+        window.update()
+        assert not app.lesson_stdin
+        assert all(not editor.get("1.0", "end-1c") for editor in app.editors)
+        assert all(not box.get("1.0", "end-1c") for box in app.results)
+        app._load_lesson()
+        app._show_page("lessons")
+        widths = []
+        for geometry in ("1180x760", "1600x900", "1180x760"):
+            window.geometry(geometry)
+            window.update()
+            for name, label in app.lesson_descriptions.items():
+                load = app.lesson_cards[name]
+                view = app.lesson_view_buttons[name]
+                assert abs(label.winfo_rootx() - load.winfo_rootx()) <= 1
+                assert abs(label.winfo_width() - load.master.winfo_width()) <= 1
+                assert abs(load.winfo_width() - view.winfo_width()) <= 1
+                expected = int(label.winfo_width() / label._get_widget_scaling())
+                assert abs(label.cget("wraplength") - expected) <= 1
+            names = list(LESSONS)
+            for index in range(0, len(names) - 1, 2):
+                left = app.lesson_cards[names[index]]
+                right = app.lesson_cards[names[index + 1]]
+                assert left.winfo_rooty() == right.winfo_rooty()
+            widths.append(app.lesson_descriptions["Recursion"].winfo_width())
+        assert widths[1] > widths[0], widths
+        assert abs(widths[2] - widths[0]) <= 1, widths
         for name in LESSONS:
             app.lesson_cards[name].invoke()
             assert app.lesson_menu.get() == name
@@ -104,8 +147,12 @@ def main() -> None:
         # A second round trip catches stale root bindings and destroyed callbacks.
         window.workspace.back_button.invoke()
         window.update()
+        window.launcher.clean_start.set(True)
         window.launcher._on_start()
         window.update()
+        assert all(not editor.get("1.0", "end-1c") for editor in window.workspace.editors)
+        assert window.workspace.report is None
+        assert not window.workspace.lesson_stdin
         assert not errors, errors
         assert window.workspace.back_button.cget("corner_radius") == UIAssets.CORNER_RADIUS
         assert window.workspace.cget("fg_color") == UIAssets.COLORS["BG_PRIMARY"]

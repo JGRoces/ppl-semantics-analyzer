@@ -33,7 +33,7 @@ Choose a lesson, click **Load lesson into both editors**, then **Run comparison*
 
 ## What works
 
-- Two independent source editors with line numbers, language selectors, and UTF-8 file loading. Gutters stay aligned while editing and scrolling.
+- Two independent source editors with line numbers, language selectors, and UTF-8 file loading. Python, JavaScript, and C++ syntax highlighting updates as you type, load lessons, or change languages, with colors for light and dark modes. Gutters stay aligned while editing and scrolling.
 - Nine lessons: recursion, iteration, lexical scope, types/coercion, parameter passing, input validation, syntax errors, runtime errors, and timeouts.
 - Python tokenization, AST display, structural metrics, and syntax/context validation without execution.
 - Clearly labeled approximate structural analysis for JavaScript and C++.
@@ -124,6 +124,7 @@ The UI takes inspiration from the team's Java Car Rental project: a split welcom
 - Light mode: gray page background, white cards, muted labels, subtle dividers.
 - Dark mode: black page background and near-black surfaces with readable text.
 - **Workspace** contains both line-numbered editors, execution controls, and expanded result tabs. Lessons use their preset standard input; there is no editable input or lesson-notes panel.
+- Enable **Start with empty editors** on the launcher to open a clean workspace. **Clear results** removes diagnostics and the exportable report while keeping source; **Clear workspace** also empties both editors and preset input, preserving language and theme choices. Clearing is disabled during comparisons; use **Stop** and wait for completion first.
 - **Demonstrations** presents nine lesson cards with concept summaries, **Load demonstration**, and **View Lesson**. Replace the placeholder PDFs in `docs/lessons/` using the filenames documented there.
 - **Reports** shows the current source/input snapshot and supports Markdown/JSON export.
 - **Back to Menu** cancels active work and returns to a fresh language selection screen in the same native window.

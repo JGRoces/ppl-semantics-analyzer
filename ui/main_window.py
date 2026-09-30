@@ -21,6 +21,7 @@ from core.execution_runner import runtime_paths
 from ui.line_numbers import LineNumberGutter
 from ui.lesson_resources import LESSON_RESOURCES
 from ui.ui_assets import UIAssets
+from ui.syntax_highlighting import SyntaxHighlighter
 
 
 class MainWindow(ctk.CTkFrame):
@@ -39,6 +40,7 @@ class MainWindow(ctk.CTkFrame):
         language_a: str = "Python",
         language_b: str = "JavaScript",
         dark_mode: bool = False,
+        clean_start: bool = False,
     ) -> None:
         """Create the themed shell and load the initial recursion lesson.
 
@@ -47,6 +49,7 @@ class MainWindow(ctk.CTkFrame):
             language_a: First language selected in the launcher.
             language_b: Second language selected in the launcher.
             dark_mode: Appearance carried over from the launcher.
+            clean_start: Start with empty source and results instead of a lesson.
         Returns:
             None.
         """
@@ -67,6 +70,7 @@ class MainWindow(ctk.CTkFrame):
         self.lesson_stdin = ""
         self.controls = []
         self.editors = []
+        self.highlighters = []
         self.line_gutters = []
         self.language_menus = []
         self.results = []
@@ -97,7 +101,10 @@ class MainWindow(ctk.CTkFrame):
             (sequence, master.bind(sequence, lambda event: self._start(True), add="+"))
             for sequence in ("<Control-Return>", "<Command-Return>")
         ]
-        self._load_lesson()
+        if clean_start:
+            self._clear_workspace()
+        else:
+            self._load_lesson()
         self._show_page("workspace")
 
     def _build_header(self, dark_mode: bool) -> None:
@@ -161,7 +168,16 @@ class MainWindow(ctk.CTkFrame):
         Returns:
             None.
         """
+        root = self.winfo_toplevel()
+        focused = root.focus_get()
+        # CTk schedules a Windows title-bar focus restore; keep its target alive
+        # even if the user immediately navigates away from this workspace.
+        root.focus_set()
         UIAssets.set_dark_mode(bool(self.appearance_switch.get()))
+        if focused is not None:
+            root.after(2, lambda: focused.focus_set() if focused.winfo_exists() else None)
+        for highlighter in self.highlighters:
+            highlighter.refresh_palette()
 
     def _build_sidebar(self) -> None:
         """Create persistent, collapsible navigation with active green states.
@@ -316,7 +332,7 @@ class MainWindow(ctk.CTkFrame):
         self.pages[key] = page
         return page
 
-    def _heading(self, parent, title: str, subtitle: str) -> None:
+    def _heading(self, parent, title: str, subtitle: str):
         """Add a page title and a short explanatory subtitle.
 
         Args:
@@ -324,19 +340,21 @@ class MainWindow(ctk.CTkFrame):
             title: Page title.
             subtitle: Supporting description.
         Returns:
-            None.
+            Heading frame, allowing page-specific actions.
         """
         heading = ctk.CTkFrame(parent, fg_color="transparent")
         heading.grid(row=0, column=0, sticky="ew", pady=(0, 14))
-        ctk.CTkLabel(heading, text=title, **UIAssets.label_kwargs("h1")).pack(
-            anchor="w"
+        heading.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(heading, text=title, **UIAssets.label_kwargs("h1")).grid(
+            row=0, column=0, sticky="w"
         )
         ctk.CTkLabel(
             heading,
             text=subtitle,
             font=UIAssets.FONTS["BODY"],
             text_color=UIAssets.COLORS["TEXT_MUTED"],
-        ).pack(anchor="w", pady=(4, 0))
+        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        return heading
 
     def _build_workspace(self, language_a: str, language_b: str) -> None:
         """Compose the controls, two editors, and expanded result card.
@@ -350,11 +368,17 @@ class MainWindow(ctk.CTkFrame):
         self.workspace = self._new_page("workspace")
         self.workspace.grid_rowconfigure(2, weight=3)
         self.workspace.grid_rowconfigure(3, weight=2)
-        self._heading(
+        heading = self._heading(
             self.workspace,
             "Comparison workspace",
             "One idea, two implementations. Inspect the source and compare what happens.",
         )
+        self.clear_workspace_button = ctk.CTkButton(
+            heading, text="Clear workspace", width=135, height=32,
+            command=self._clear_workspace, **UIAssets.button_kwargs("secondary"),
+        )
+        self.clear_workspace_button.grid(row=0, column=1, rowspan=2, sticky="e", padx=(12, 0))
+        self.controls.append(self.clear_workspace_button)
         self._build_tools()
         editor_row = ctk.CTkFrame(self.workspace, fg_color="transparent")
         editor_row.grid(row=2, column=0, sticky="nsew", pady=12)
@@ -499,6 +523,7 @@ class MainWindow(ctk.CTkFrame):
         gutter.grid(row=0, column=0, sticky="ns")
         editor.bind("<<Modified>>", lambda event: self._text_modified(editor))
         self.editors.append(editor)
+        self.highlighters.append(SyntaxHighlighter(editor, menu.get))
         self.line_gutters.append(gutter)
         self.language_menus.append(menu)
         self.controls.extend([editor, menu, open_button])
@@ -525,6 +550,12 @@ class MainWindow(ctk.CTkFrame):
         # light mode; a single shared text color would lose contrast on the selected accent.
         self.tab_strip = ctk.CTkFrame(header, fg_color="transparent")
         self.tab_strip.grid(row=0, column=1)
+        self.clear_results_button = ctk.CTkButton(
+            header, text="Clear results", width=105, height=28,
+            command=self._clear_results, **UIAssets.button_kwargs("secondary"),
+        )
+        self.clear_results_button.grid(row=0, column=2, padx=(12, 0))
+        self.controls.append(self.clear_results_button)
         self.view_buttons = {}
         for index, view in enumerate(self.HEADER_TABS):
             button = ctk.CTkButton(
@@ -576,9 +607,12 @@ class MainWindow(ctk.CTkFrame):
         library.grid_columnconfigure((0, 1), weight=1, uniform="lessons")
         self.lesson_cards = {}
         self.lesson_view_buttons = {}
+        self.lesson_descriptions = {}
         for index, name in enumerate(LESSONS):
             card = ctk.CTkFrame(library, **UIAssets.frame_kwargs())
             card.grid(row=index // 2, column=index % 2, sticky="nsew", padx=6, pady=6)
+            card.grid_columnconfigure(0, weight=1)
+            card.grid_rowconfigure(2, weight=1)
             ctk.CTkLabel(
                 card,
                 text=f"{index + 1:02}",
@@ -588,22 +622,29 @@ class MainWindow(ctk.CTkFrame):
                 fg_color=UIAssets.COLORS["TINT_GREEN"],
                 font=UIAssets.FONTS["H3"],
                 text_color=UIAssets.COLORS["TEXT_PRIMARY"],
-            ).pack(anchor="w", padx=18, pady=(18, 12))
-            ctk.CTkLabel(card, text=name, **UIAssets.label_kwargs("h2")).pack(
-                anchor="w", padx=18
+            ).grid(row=0, column=0, sticky="w", padx=18, pady=(18, 12))
+            ctk.CTkLabel(card, text=name, **UIAssets.label_kwargs("h2")).grid(
+                row=1, column=0, sticky="w", padx=18
             )
-            ctk.CTkLabel(
+            description = ctk.CTkLabel(
                 card,
                 text=LESSON_RESOURCES[name]["summary"],
+                width=1,
                 wraplength=340,
                 justify="left",
-                anchor="w",
+                anchor="nw",
                 font=UIAssets.FONTS["BODY"],
                 text_color=UIAssets.COLORS["TEXT_MUTED"],
-            ).pack(fill="x", padx=18, pady=(6, 14))
+            )
+            description.grid(row=2, column=0, sticky="nsew", padx=18, pady=(6, 14))
+            description.bind(
+                "<Configure>",
+                lambda event, label=description: self._resize_lesson_description(label),
+            )
+            self.lesson_descriptions[name] = description
             actions = ctk.CTkFrame(card, fg_color="transparent")
-            actions.pack(side="bottom", fill="x", padx=18, pady=(0, 18))
-            actions.grid_columnconfigure((0, 1), weight=1)
+            actions.grid(row=3, column=0, sticky="ew", padx=18, pady=(0, 18))
+            actions.grid_columnconfigure((0, 1), weight=1, uniform="lesson_actions")
             button = ctk.CTkButton(
                 actions,
                 text="Load demonstration",
@@ -625,6 +666,13 @@ class MainWindow(ctk.CTkFrame):
             self.controls.append(button)
             self.lesson_cards[name] = button
             self.lesson_view_buttons[name] = view_button
+
+    @staticmethod
+    def _resize_lesson_description(label: ctk.CTkLabel) -> None:
+        """Wrap the summary to its available width in logical display pixels."""
+        width = max(1, int(label.winfo_width() / label._get_widget_scaling()))
+        if label.cget("wraplength") != width:
+            label.configure(wraplength=width)
 
     def _view_lesson(self, name: str) -> None:
         """Open the selected local PDF with the platform's document handler.
@@ -761,6 +809,8 @@ class MainWindow(ctk.CTkFrame):
         Returns:
             None.
         """
+        for highlighter in self.highlighters:
+            highlighter.request()
         if self.busy:
             return
         self.report = None
@@ -775,6 +825,31 @@ class MainWindow(ctk.CTkFrame):
                 "Results cleared. Analyze or run the current source and input.",
                 readonly=True,
             )
+
+    def _clear_results(self) -> None:
+        """Clear diagnostics and export state, preserving source and settings."""
+        if self.busy:
+            return
+        self.report = None
+        self.export_button.configure(state="disabled")
+        self._refresh_report_page()
+        for textbox in self.results:
+            self._set_text(textbox, "", readonly=True)
+        self.summary_label.configure(text="Ready to analyze or run.")
+        self.status_label.configure(text="Results cleared. Your source is unchanged.")
+
+    def _clear_workspace(self) -> None:
+        """Empty both editors and preset input; keep languages and appearance."""
+        if self.busy:
+            return
+        for editor, highlighter in zip(self.editors, self.highlighters):
+            self._set_text(editor, "")
+            highlighter.request()
+        self.lesson_stdin = ""
+        self._clear_results()
+        self._change_view("Static AST")
+        self.status_label.configure(text="Empty workspace. Type code, open a file, or load a lesson.")
+        self.highlighters[0].text.focus_set()
 
     def _start(self, run: bool) -> None:
         """Snapshot widgets and launch a single background comparison worker.
@@ -1011,6 +1086,8 @@ class MainWindow(ctk.CTkFrame):
             None; workers finish cancellation without accessing Tk widgets.
         """
         self.cancel_event.set()
+        for highlighter in self.highlighters:
+            highlighter.close()
         if self.poll_id is not None:
             self.after_cancel(self.poll_id)
             self.poll_id = None
