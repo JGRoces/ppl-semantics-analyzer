@@ -1,16 +1,19 @@
 # PPL Semantics Analyzer — Project Documentation
 
-**Course:** CSS125P — Principles of Programming Languages  
-**Group:** 4  
-**Assignment:** Programming Language Comparison and Demonstration System  
-**Authors:** Joseph Gabriel A. Roces, Marc Jansen D. Felipe, Nikolai P. Lagarde, and Danaiah Niccola D. Bajao  
-**Implementation reviewed:** 2026-09-28
+**University:** Mapua University\
+**Application name:** Paradigm Diagnostics\
+**Status:** Presented and graded\
+**Course:** CSS125P — Principles of Programming Languages\
+**Group:** 4\
+**Assignment:** Programming Language Comparison and Demonstration System\
+**Authors:** Joseph Gabriel A. Roces, Marc Jansen D. Felipe, Nikolai P. Lagarde, and Danaiah Niccola D. Bajao\
+**Documentation updated:** 2026-09-30
 
 ## 1. Project Title and Introduction
 
 **PPL Semantics Analyzer: An Interactive Programming Language Comparison and Demonstration System**
 
-This desktop application lets students compare small Python, JavaScript, and C++ programs side by side. Students can inspect source structure, supply input, execute both snippets, and explain differences using programming-language concepts. It is designed for Group 4's comparison assignment. The team should retain the instructor's confirmation of the project title and selected tools.
+This desktop application lets students compare small Python, JavaScript, and C++ programs side by side. Students can inspect source structure, execute both snippets with the selected lesson’s input preset, and explain differences using programming-language concepts. It is designed for Group 4's comparison assignment. The application is branded **Paradigm Diagnostics** in the interface and retains **PPL Semantics Analyzer** as its repository/project title. The project has been presented and graded at Mapua University.
 
 The system uses real host toolchains for execution. Python receives native tokenization and AST inspection. JavaScript and C++ receive approximate source-pattern analysis, explicitly labeled in the interface. This difference is itself useful for discussing the boundary between lexical pattern matching and grammatical parsing.
 
@@ -34,7 +37,7 @@ Provide a functional desktop system that demonstrates and compares core PPL conc
 2. Explain at least five PPL concepts using deterministic demonstrations.
 3. Show Python tokens, parsed structure, and structural metrics without execution.
 4. Clearly distinguish approximate JavaScript/C++ structure from actual parser/compiler diagnostics.
-5. Supply standard input and display stdout, stderr, exit status, and timing.
+5. Supply finite lesson input presets and display stdout, stderr, exit status, and timing.
 6. Handle source errors, missing tools, runtime failures, cancellation, output floods, and timeouts.
 7. Export reproducible source/input/result snapshots.
 8. Verify both successful and erroneous inputs with automated tests and native GUI checks.
@@ -62,7 +65,7 @@ Python name binding and parameter behavior are explained by its [execution model
 ### Inputs
 
 - Source A and B, each with a selected language: Python, JavaScript, or C++.
-- Shared standard input as finite text, delivered independently to each process.
+- Shared standard input from the loaded lesson, delivered independently as finite text to each process. The current UI has no editable stdin panel; the backend API accepts arbitrary input text. The input-validation lesson supplies `7` and produces `49`; invalid inputs are covered by backend tests.
 - An execution timeout selected from 1, 2, 5, or 10 seconds in the UI.
 - A lesson selection or UTF-8 source file.
 
@@ -83,7 +86,7 @@ The public runner accepts a positive finite timeout up to 30 seconds. The dashbo
 
 ### Design decisions
 
-The UI adapts the team's Java Car Rental design into a split launcher and a collapsible dashboard with persistent content pages. Shared design tokens control both themes. Analysis and execution remain independent of CustomTkinter. A queue connects the worker to the main Tk thread so a slow child does not freeze the desktop window.
+The UI adapts the team's Java Car Rental design into a split launcher and a collapsible dashboard with persistent content pages. Shared design tokens control both themes, terminal-green accents, and rounded components. The three dashboard pages are Workspace, Demonstrations, and Reports. Both editors have line-number gutters and Pygments syntax coloring; lexical coloring does not validate syntax. Analysis and execution remain independent of CustomTkinter. A queue connects the worker to the main Tk thread so a slow child does not freeze the desktop window.
 
 ## 6. Keywords, Identifiers, Operators, Literals, Data Types, Statements, and Expressions
 
@@ -131,7 +134,7 @@ JavaScript expresses the corresponding function with `function`, parentheses, br
 
 ```mermaid
 flowchart TD
-    L[Launcher: language and appearance] --> U[Two source editors and shared input]
+    L[Persistent window: languages, appearance, empty-start option] --> U[Two source editors and lesson input preset]
     U --> S[Snapshot inputs on main GUI thread]
     S --> W[Background comparison worker]
     W --> P[Python tokenizer, AST and context checks]
@@ -163,7 +166,18 @@ This adapts the professor's suggested pipeline: **Source → lexical/structural 
 | `core/self_check.py` | Run real factorial programs to verify that located tools work |
 | `ui/main_window.py` | Build panels; snapshot input; start worker; render reports; invalidate stale results; open/export files |
 | `ui/launcher_window.py` | Pass language and appearance values to the persistent application root |
-| `ui/ui_assets.py` | Central color, typography, card radii, and widget helpers |
+| `ui/ui_assets.py` | Central color, typography, syntax colors, card radii, and widget helpers |
+| `ui/line_numbers.py` | Canvas gutters aligned to native Tk text geometry and scroll callbacks |
+| `ui/syntax_highlighting.py` | Pygments lexical tags, 120 ms debounce, Unicode indexing, and cleanup |
+| `ui/lesson_resources.py` | Nine card summaries and filenames for bundled lesson PDFs |
+
+### Workspace lifecycle and lesson resources
+
+`Application` owns one native root and event loop. Entry and workspace are child frames; opening the workspace preserves window geometry. **Start with empty editors** bypasses the initial recursion lesson. Navigation among Workspace, Demonstrations, and Reports retains source and report state.
+
+**Clear results** removes diagnostics and disables export while retaining source/settings. **Clear workspace** also empties both editors and preset input, retaining languages and appearance. Both actions are disabled during comparisons. **Back to Menu** cancels work, removes polling, keyboard, and highlighting callbacks, and destroys the workspace before showing a fresh launcher. It retains appearance but does not save unsaved code or reports.
+
+Demonstration cards load matching language examples or open a bundled PDF. PDF paths are relative to the repository; missing files or failed opening produce a recoverable dialog. Source, language, or timeout changes invalidate the previous report.
 
 ### Analysis definitions
 
@@ -207,9 +221,12 @@ On 2026-09-28, the presentation Mac used macOS 26.3 (Apple Silicon), Python 3.14
 venv/bin/python -m pytest -q
 venv/bin/python -m core.self_check
 venv/bin/python -m tests.gui_smoke
+venv/bin/python -m tests.gutter_smoke
+venv/bin/python -m tests.finalization_smoke
+venv/bin/python -m tests.syntax_smoke
 ```
 
-The first command runs the automated source/runner/comparison tests. The second actually executes all three toolchains. The third is an opt-in native desktop test that opens windows. GUI windows are excluded from ordinary pytest collection. Missing Node/C++ tools cause explicit test skips, which must not be mistaken for verified coverage on another machine.
+The first command runs the automated source/runner/comparison tests. The second actually executes all three toolchains. The remaining commands are opt-in native desktop checks: integration, gutter compatibility, final UI lifecycle, and syntax highlighting respectively. They open windows. On Windows, replace `venv/bin/python` with `.\venv\Scripts\python.exe`. GUI windows are excluded from ordinary pytest collection. Missing Node/C++ tools cause explicit test skips, which must not be mistaken for verified coverage on another machine.
 
 ### Meaningful normal and error cases
 
@@ -233,14 +250,16 @@ The first command runs the automated source/runner/comparison tests. The second 
 | Static-only side effect | Source that would create a file | File never created | Passed |
 | Report export | Successful comparison | Original source/input and all views serialized | Passed |
 
-The expanded automated run recorded **74 passed, zero skipped**. The native GUI smoke check passed launcher handoff, language/theme preservation, execution, view rendering, file loading, JSON export, error display, cancellation, and recovery. On 2026-09-29 the native check also passed independent editor line numbering, 1,000-line source loading, insertion/deletion, vertical and horizontal scrolling, resizing, and light/dark gutter colors.
+The 2026-09-30 automated run recorded **74 passed, zero skipped**, including all 27 lesson/language combinations. All three runtime self-checks also passed. These are historical verification results; this documentation-only update does not rerun application tests. The native GUI smoke check passed launcher handoff, language/theme preservation, execution, view rendering, file loading, JSON export, error display, cancellation, and recovery. On 2026-09-29 the native check also passed independent editor line numbering, 1,000-line source loading, insertion/deletion, vertical and horizontal scrolling, resizing, and light/dark gutter colors.
 
-Desktop screenshot inspection could not be completed because Computer Use permission was unavailable. Native widget/callback checks verify functionality; the team should confirm projector readability during rehearsal. Only this Mac has been verified.
+On 2026-09-30, the finalization smoke script passed layout, lesson input presets, clearing, empty startup, PDF action routing, menu round trips, and worker cancellation. The syntax smoke script passed both editors across all three languages, Unicode, typing, undo, selection, theme, and callback cleanup. PDF opening calls are mocked in the finalization script: this checks paths and action/error routing, not external viewer rendering or lesson content.
+
+Desktop screenshot inspection was unavailable. Native widget/callback checks establish functional evidence, not visual review. The recorded native runs were on this Mac; Windows compatibility checks do not establish a full native Windows test run. Passing tests cover the checked cases, not every possible program or measured learning outcomes.
 
 ## 11. Conclusion and Recommendations
 
 The application provides input, processing, output, and recoverable errors while demonstrating more than five PPL concepts. Its strongest teaching use is to connect source structure with actual behavior: show a language rule, run a small example, inspect the evidence, and explain the limits of that observation.
 
-For tomorrow's presentation, rehearse recursion, types/coercion, scope or parameter passing, and one failure/recovery path. Export the reports beforehand as a backup. Each member should be able to explain the module they present and distinguish measured evidence from reference language facts.
+The project has completed its presentation and grading. The recorded tests support the implemented comparison workflows and error handling. Educational effectiveness has not been measured through a student study.
 
-Future work should replace JavaScript/C++ surface patterns with dedicated parsers, introduce scoped symbol tables and richer type evidence, improve code editing and source persistence, add repeatable benchmark methodology, and isolate execution more strongly before accepting untrusted code. Do not add those large changes immediately before the demonstration.
+Future work should replace JavaScript/C++ surface patterns with dedicated parsers, introduce scoped symbol tables and richer type evidence, add saved workspaces and an editable stdin workflow, evaluate the lesson materials with students, add repeatable benchmark methodology, and isolate execution more strongly before accepting untrusted code.

@@ -1,12 +1,12 @@
 # Design adaptation: Car Rental → Paradigm Diagnostics
 
-The user selected five files from their previous Java project as design inspiration. Their source comments describe that project; they do not add requirements such as authentication, rental management, or copying its business logic into this app.
+The Mapua University Group 4 team adapted five files from the lead developer’s previous Java Car Rental project for Paradigm Diagnostics. Their source comments describe that project; they do not add requirements such as authentication, rental management, or copying its business logic into this app.
 
 ## Reference mapping
 
 | Selected reference | Python adaptation |
 | :--- | :--- |
-| `UIAssets.java` | Light/dark palette, typography hierarchy, four accent colors, subtle borders, and shared style factories in `ui/ui_assets.py` |
+| `UIAssets.java` | Light/dark palette, typography hierarchy, four shades of green, subtle borders, and shared style factories in `ui/ui_assets.py` |
 | `LoginGUI.java` | Split branding/setup launcher, large welcome heading, four-shade green brand mark, primary/secondary actions |
 | `SignUpChoiceGUI.java` | Comparison-pair choices in the launcher and actionable demonstration cards in the dashboard |
 | `AdminDashboardGUI.java` | Product title and subtitle in the top bar, collapsible sidebar, active green navigation, persistent content pages |
@@ -27,16 +27,26 @@ The car photograph and account roles are replaced with programming-specific cont
 ## State and navigation logic
 
 - `_new_page()` creates each page once.
-- `_show_page()` changes page visibility and navigation styling. Editors and input widgets remain alive, so source is preserved across navigation.
+- `_show_page()` changes page visibility and navigation styling. Editors and the lesson input preset remain alive, so source is preserved across navigation.
 - `_toggle_sidebar()` changes sidebar width and label presentation. Editor/grid resize notifications update the gutters automatically.
 - `_select_lesson()` loads the appropriate source variants and returns to the workspace. It does not execute code automatically.
-- `_refresh_report_page()` shows a processing message, the completed snapshot, or an empty-state explanation. Editing source/input clears previous evidence on both the workspace and report page.
+- `_refresh_report_page()` shows a processing message, the completed snapshot, or an empty-state explanation. Changing source, language, timeout, or the loaded lesson clears previous evidence on both the workspace and report page.
 - Result-view buttons independently style their selected/inactive text to preserve contrast in both themes.
 - All lesson-loading and editing controls disable during a comparison. Navigation remains available; it cannot mutate the worker's source snapshot.
 
+## Editor and workspace refinements
+
+Both source editors use independent line-number canvases and Pygments syntax tags. Gutters attach scroll callbacks to native Tk text widgets for wrapper compatibility. Syntax tags follow the selected language and theme, preserve source and undo, and handle supplementary Unicode characters.
+
+The launcher offers **Start with empty editors**. **Clear results** retains source; **Clear workspace** also clears both editors and preset stdin. Both actions are unavailable during a comparison. Lessons supply finite input presets; there is no editable stdin panel or separate Guide page. Demonstration cards use responsive summaries, aligned actions, and local **View Lesson** PDF links.
+
+**Back to Menu** preserves appearance and the native window while disposing of the workspace, cancelling work and callbacks. It does not retain unsaved source or reports. Moving among dashboard pages retains them.
+
 ## Verification
 
-The native smoke test covers launcher preset selection and theme handoff, all four pages, green active navigation, source preservation, collapse/expand behavior, library actions, report freshness, and essential control bounds at the supported minimum window size. Existing checks still exercise line numbers, both scroll directions, source editing, execution, errors, cancellation, file opening, and export.
+The native smoke test covers launcher preset selection and theme handoff, all three dashboard pages (Workspace, Demonstrations, and Reports), green active navigation, source preservation, collapse/expand behavior, library actions, report freshness, and essential control bounds at the supported minimum window size. Existing checks still exercise line numbers, both scroll directions, source editing, execution, errors, cancellation, file opening, and export.
+
+The finalization smoke script also covers clearing, empty startup, card layout, PDF action routing, and menu cancellation; external PDF open calls are mocked. The syntax smoke script checks token tags, Unicode, selection, undo, theme, and cleanup. Recorded results are in [project documentation](documentation.md#10-testing-and-results).
 
 The backend is independent of the redesigned UI and retains the same comparison/execution contracts. Desktop screenshot review remains unavailable unless Computer Use permission is enabled; native layout and callback checks provide functional evidence, not a claim of pixel-by-pixel visual inspection.
 

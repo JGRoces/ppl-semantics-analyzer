@@ -1,10 +1,10 @@
 # Implementation walkthrough
 
-This guide explains the major code blocks and decisions so each team member can present the implementation. Read it beside the source files. Function docstrings describe arguments and return values; comments explain decisions that would otherwise be easy to misunderstand.
+This guide documents the completed Mapua University Group 4 project, branded **Paradigm Diagnostics**. It explains the major code blocks and decisions so each team member can present the implementation. Read it beside the source files. Function docstrings describe arguments and return values; comments explain decisions that would otherwise be easy to misunderstand.
 
 ## 1. Entry point and launcher
 
-`main.py:main()` creates one `Application` root and runs one event loop. `ui/application.py` mounts the welcome page inside that window. When Open workspace is clicked, `LauncherWindow._on_start()` reads the language and theme choices and calls `Application.open_workspace()`. That method builds the workspace as another child frame, raises it in the same grid cell, and destroys only the old entry widgets. The native window, geometry, and event loop remain intact. Cancel closes the root; closing during diagnostics invokes the workspace's process-cleanup path.
+`main.py:main()` creates one `Application` root and runs one event loop. `ui/application.py` mounts the welcome page inside that window. When Open workspace is clicked, `LauncherWindow._on_start()` reads the language, theme, and empty-start choices and calls `Application.open_workspace()`. That method builds the workspace as another child frame, raises it in the same grid cell, and destroys only the old entry widgets. The native window, geometry, and event loop remain intact. Cancel closes the root; closing during diagnostics invokes the workspace's process-cleanup path.
 
 `LauncherWindow` and `MainWindow` are now `CTkFrame` pages, not separate roots. Return on the entry page is unbound during the transition, and the workspace installs its Ctrl/⌘ + Enter shortcut on the persistent root. The selected theme is applied without resetting the root to light mode.
 
@@ -118,29 +118,45 @@ Syntax error has a deliberately malformed header. Runtime error uses valid synta
 
 `__init__()` creates state, the queue, a cancellation event, and the dashboard shell. `_new_page()` allocates persistent pages in a common content area. `_show_page()` switches visibility and updates the active navigation; it never destroys editors. `_toggle_sidebar()` reduces the sidebar width and hides longer labels, giving the editors more room without losing source.
 
-The `_build_*` methods create the header, sidebar, workspace, lesson library, report page, and guide. `_heading()` standardizes page titles. `_action()` styles toolbar buttons and registers controls to disable while work runs. `_select_lesson()` loads a library choice and returns to the workspace. `_refresh_report_page()` shows the current snapshot, a processing message, or an empty state so navigation cannot reveal stale results. `_toggle_appearance()` applies the selected theme. `_set_text()` replaces text and optionally makes it read-only.
+The `_build_*` methods create the header, sidebar, and three pages: Workspace, Demonstrations, and Reports. `_heading()` standardizes page titles. `_action()` styles toolbar buttons and registers controls to disable while work runs. `_select_lesson()` loads a library choice and returns to the workspace. `_refresh_report_page()` shows the current snapshot, a processing message, or an empty state so navigation cannot reveal stale results. `_toggle_appearance()` applies the selected theme. `_set_text()` replaces text and optionally makes it read-only.
 
-`_load_lesson()` selects sources matching both language menus and fills shared stdin. `_text_modified()` handles the native modified flag for typing, paste, cut, undo, and redo. `_edited()` discards old results, preventing changed source from being displayed alongside stale evidence.
+`_load_lesson()` selects sources matching both language menus and stores its shared input preset in `self.lesson_stdin`. There is no stdin editor; `_start()` snapshots this preset for both snippets. `_text_modified()` handles the native modified flag for typing, paste, cut, undo, and redo. `_edited()` discards old results, preventing changed source from being displayed alongside stale evidence.
 
 `_start()` snapshots widget contents on the GUI thread, validates source size, disables editing controls, and starts one worker. `_work()` calls the UI-independent comparison service and sends either its report or a readable exception to the queue. It never touches Tk.
 
 `_poll()` runs through Tk's `after()` scheduling. If no result is ready, it schedules another check. On completion it restores controls and renders the selected view. `_change_view()` only reformats the stored report; switching tabs does not execute code again.
 
-`_stop()` sets the cancellation event. `_close()` sets the same event and removes the polling callback before destroying the window. The worker is non-daemon so it has an opportunity to clean up its child before Python exits.
+`_stop()` sets the cancellation event. `_close()` destroys the root; workspace `destroy()` sets cancellation, closes highlighters, removes the polling callback, and unbinds the root run shortcuts before destroying widgets. The worker is non-daemon so it has an opportunity to clean up its child before Python exits.
 
 `_open_source()` reads a bounded UTF-8 file and infers language from familiar extensions. `_export()` asks for a destination and saves Markdown or JSON. Cancelling either dialog does nothing; file errors remain recoverable dialogs.
+
+### Clearing and returning to the menu
+
+`_clear_results()` clears the report and visible diagnostics and disables export without changing source or settings. `_clear_workspace()` also empties source and `lesson_stdin`, schedules recoloring, restores the Static AST view, and focuses the first editor. Busy guards prevent clearing an active comparison.
+
+`Application.back_to_menu()` retains appearance and destroys the workspace, triggering cancellation and callback cleanup. It creates a fresh launcher in the same native root. A later workspace is a new instance; unsaved editor text and reports are not restored. Ordinary dashboard page navigation preserves these objects.
+
+`_view_lesson()` resolves the filename in `ui/lesson_resources.py` under `docs/lessons/`. Windows uses `os.startfile`; other systems use a local file URI through `webbrowser.open`. Missing files and opening failures show recoverable dialogs. `_resize_lesson_description()` adapts text wrapping to available card width and display scaling.
 
 ## 7. Line numbers: `ui/line_numbers.py`
 
 Each editor shares a container with its own `LineNumberGutter`. The gutter uses a canvas; numbers never become part of source, copied text, execution input, or exported code.
 
-The constructor finds the editor's native Tk Text child to obtain its actual origin and font. It subscribes to edits and layout changes and wraps the vertical-scroll callback. `_on_scroll()` first calls the original scrollbar callback, then schedules a redraw. Keeping that original callback is necessary for the scrollbar thumb to stay correct.
+The constructor finds the editor's native Tk Text child to obtain its actual origin and font. It subscribes to edits and layout changes and wraps the vertical-scroll callback on the native Tk Text widget. Attaching it there avoids the unsupported `yscrollcommand` option on CustomTkinter wrappers. `_on_scroll()` first calls the original scrollbar callback, then schedules a redraw. Keeping that original callback is necessary for the scrollbar thumb to stay correct.
 
 `_request_redraw()` combines repeated events into one idle callback, allowing Tk to finish laying out text. `_redraw()` uses the final logical line number to choose a width, starts at the top visible line, and calls `dlineinfo()` for each visible line. It offsets those coordinates by the difference between the text and canvas origins. Consequently numbers remain aligned after scrolling, resizing, and changes in padding or display scaling.
 
 The gutter grows to fit three- or four-digit line numbers and shrinks when lines are deleted. An empty document still displays line one. Horizontal scrolling changes the source viewport but not the gutter. Appearance/scaling callbacks redraw the native canvas using shared design tokens; `destroy()` cancels scheduled work and removes event hooks.
 
-## 8. Design tokens and verification
+## 8. Syntax highlighting: `ui/syntax_highlighting.py`
+
+Each editor owns an independent `SyntaxHighlighter`. Pygments lexers recognize Python, JavaScript, and C++ token families for comments, keywords, strings, numbers, functions, and built-ins. They provide lexical coloring, not syntax validation or type checking.
+
+`request()` cancels a pending callback and schedules coloring after a 120 ms pause. `highlight()` reads source, clears previous syntax tags, and applies grouped ranges without rewriting text. This preserves cursor, selection, source, and undo history. A mapping accounts for Tk versions that count supplementary Unicode characters as two index units. Sources over 100,000 characters remain editable but are not recolored.
+
+`refresh_palette()` resolves shared light/dark syntax colors and raises the selection tag above coloring. `close()` cancels pending work before the editor is removed. Installing the updated `requirements.txt` is required because Pygments is imported at application startup.
+
+## 9. Design tokens and verification
 
 `UIAssets` centralizes colors, fonts, subtle borders, and rounded card/button radii, adapting the Java UIAssets design. The `accent_bar()` factory builds a mark using four shades of green. Its style factories return argument dictionaries used by widget constructors; appearance-aware color pairs select the light or dark value. The new gutter adds one background token and reuses the editor font and muted text color.
 
@@ -148,6 +164,8 @@ The gutter grows to fit three- or four-digit line numbers and shrinks when lines
 
 `tests/test_cases.py` covers normal examples, invalid inputs, structural regressions, tool failures, timeouts, cancellation, output limits, static-only behavior, and report content. `tests/gui_smoke.py` opens real native windows to exercise integration, including line-number alignment, scrolling, edits, theme changes, file loading, execution, error recovery, and export.
 
-## 9. Green accents and header identity
+`tests/gutter_smoke.py` checks native scroll callback compatibility and restoration. `tests/finalization_smoke.py` checks the three-page layout, card resizing, lesson input, clearing, menu round trips, and cancellation. Its PDF opening calls are mocked to test routing and errors. `tests/syntax_smoke.py` checks both editors, all lexers, Unicode, undo, selection, theme, and cleanup. See [Testing and Results](documentation.md#10-testing-and-results) for recorded runs and their limits.
+
+## 10. Green accents and header identity
 
 `ACCENT`, `ACCENT_PRESSED`, and `TINT_ACCENT` are semantic theme keys used for primary actions, selected navigation, and selection cards. Their values are green; named `BRAND_GREEN_1` through `BRAND_GREEN_4` color the existing entry mark without changing its shape. The code preview uses green keyword/value tokens. Existing warning/error colors retain their meanings. The header removes the G4 badge and uses the H1 and BODY typography tokens for the product title and subtitle.

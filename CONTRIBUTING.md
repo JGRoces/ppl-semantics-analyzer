@@ -1,8 +1,8 @@
 # Contributing Guide — PPL Semantics Analyzer
 
-Guidelines for our 4-person group. Please read before your first commit.
+Maintenance guidelines for the four-person **Mapua University, CSS125P Group 4** team. The project has been presented and graded; these conventions apply to subsequent changes.
 
-> 🔄 **Architectural pivot:** We've moved off Streamlit and onto a native desktop UI built with **CustomTkinter**. The old `app.py` presentation layer is being replaced by the `ui/` package — which now also includes an entry launcher (`ui/launcher_window.py`) shown before the main dashboard opens. `core/` (backend analysis + execution) is unaffected — if you were assigned a `core/` file before the pivot, nothing changes for you.
+**Current architecture:** `main.py` creates one `ui/application.py` native root. Entry and workspace are child frames; the dashboard contains Workspace, Demonstrations, and Reports. `core/` performs analysis, execution, and report rendering independently of Tk. A worker returns snapshots through a queue; only the main thread accesses widgets. Pygments provides editor coloring, while Python AST analysis and the host toolchains provide diagnostics.
 
 ---
 
@@ -15,9 +15,9 @@ We use a **strict 2-branch model**:
 | `main` | Presentation/production-ready releases only | ❌ No |
 | `dev` | Active integration branch | ❌ No |
 
-All work happens on **feature branches** that merge into `dev` via Pull Request. `main` only receives merges from `dev` when we're ready to present.
+All work happens on **feature branches** that merge into `dev` via Pull Request. `main` only receives merges from `dev` when an integration release is ready.
 
-> 🔒 **Protection expectation:** Both `main` and `dev` should be set as protected branches in GitHub settings (require PR review before merge, no force-push) once the repo is created.
+> 🔒 **Protection expectation:** Both `main` and `dev` should be set as protected branches in GitHub settings (require PR review before merge, no force-push) for ongoing maintenance; this document does not verify remote protection settings.
 
 Feature branch naming convention:
 
@@ -105,7 +105,7 @@ Per academic integrity policy, log any AI-assisted work here (or in a shared doc
 | 2026-09-30 | Codex | Add clear actions and an empty workspace launch option | Separate results/source clearing and clean startup | Added launcher toggle, busy-state guards, reset checks, and safe focus/highlighting cleanup | Allow a fresh workspace without restarting the application |
 | 2026-09-30 | Codex | Add syntax highlighting to both source editors | Language-aware coloring for Python, JavaScript, and C++ | Added Pygments, shared light/dark syntax colors, debounced text tags, and native GUI checks | Improve readability while preserving source, undo history, and editor navigation |
 | 2026-09-30 | Codex | Align demonstration descriptions with their concept cards | Responsive text wrapping and consistent action alignment | Used available card width with display scaling, aligned content with a grid, and verified resizing in GUI checks | Make descriptions use the card space and keep buttons aligned |
-| YYYY-MM-DD | e.g. Claude | e.g. "Generate subprocess timeout handler" | e.g. Function with try/except TimeoutExpired | e.g. Adjusted default timeout to 5s | e.g. Matched rubric's error-handling requirement |
+| 2026-09-30 | Codex | Refresh all remaining Markdown after presentation and grading | Current architecture, setup, UI lifecycle, and recorded verification | Added Mapua University; removed deleted-file links and obsolete UI instructions; preserved historical assistance entries | Keep the completed project documentation aligned with the source |
 | 2026-09-30 | Codex | Restore the screenshot and Car Rental design with a green terminal palette | Restored rounded controls and light/dark surface hierarchy | Kept menu navigation, expanded results, lesson summaries and PDF actions; made lesson badges green | Follow the user's updated visual direction while retaining completed functionality |
 | 2026-09-30 | Codex | Finalize sidebar, workspace, and demonstration cards | Return-to-menu lifecycle, expanded results, lesson summaries, and PDF actions | Applied flat black/white surfaces with green/blue/red accents; added nine replaceable placeholder PDFs and focused GUI checks | Prepare the requested UI changes for review |
 | 2026-09-30 | Codex | Diagnose workspace startup failure after a Windows clone | Native Tk scroll callback compatibility fix and explicit Windows setup commands | Updated gutter attachment/restoration and GUI regression coverage | Avoid unsupported CustomTkinter wrapper options and interpreter mismatches |
@@ -118,22 +118,31 @@ Per academic integrity policy, log any AI-assisted work here (or in a shared doc
 
 ## File Ownership & Task Distribution
 
-> Assign owners during team review. The user-approved redesign replaces numbered grid divisions with persistent dashboard pages. Central design tokens still apply.
+> Individual maintenance owners have not been recorded. The table inventories implemented modules without inferring authorship. Central design tokens apply to all UI changes.
 
 | Module/File | Owner | Status |
 | :--- | :--- | :--- |
 | `main.py` / `ui/application.py` (persistent window) | *(assign)* | Implemented |
 | `ui/ui_assets.py` (shared theme and styles) | *(assign)* | Implemented |
 | `ui/launcher_window.py` (split welcome/setup screen) | *(assign)* | Implemented |
-| `ui/main_window.py` (shell, navigation, workspace, lessons, reports, guide) | *(assign)* | Implemented |
+| `ui/main_window.py` (shell, workspace, demonstrations, reports, worker lifecycle) | *(assign)* | Implemented |
 | `ui/line_numbers.py` (editor gutters) | *(assign)* | Implemented |
+| `ui/syntax_highlighting.py` / `ui/lesson_resources.py` | *(assign)* | Implemented |
 | `core/ast_analyzer.py` | *(assign)* | Implemented; documented heuristic limits |
 | `core/execution_runner.py` | *(assign)* | Implemented |
 | `core/comparison.py` / `core/examples.py` | *(assign)* | Implemented |
-| `tests/test_cases.py` / `tests/gui_smoke.py` | *(assign)* | Automated checks available |
-| `docs/` | *(assign)* | Written; team review before submission |
+| `tests/test_cases.py` / four `tests/*smoke.py` scripts | *(assign)* | Backend tests and opt-in native checks available |
+| `docs/` | *(assign)* | Updated for the presented and graded application |
 
 ---
+
+## Local verification and dependency updates
+
+Install `requirements.txt` after syncing dependency changes. It includes CustomTkinter, Pygments, and pytest. On Windows, use `.\venv\Scripts\python.exe -m pip install -r requirements.txt` and launch with `.\venv\Scripts\python.exe main.py` to avoid interpreter mismatches. macOS/Linux can use `venv/bin/python` for the same commands.
+
+Run `python -m pytest -q` for backend tests and `python -m core.self_check` for real toolchain execution. For native UI changes, select the relevant `python -m tests.gui_smoke`, `tests.gutter_smoke`, `tests.finalization_smoke`, or `tests.syntax_smoke` module. These open windows and are separate from pytest. PDF action tests mock external viewers; do not report them as PDF visual checks.
+
+Keep documentation aligned with actual source behavior: lesson input is preset, dashboard navigation preserves state, Back to Menu disposes of it, and Pygments coloring is not a parser. Retain documented limitations of approximate JavaScript/C++ analysis and local subprocess execution.
 
 ## Pull Request Checklist
 
@@ -141,8 +150,10 @@ Before requesting review, confirm:
 
 - [ ] Branch is up to date with `dev` (no merge conflicts)
 - [ ] Code follows PEP 8 and includes docstrings
-- [ ] New/changed logic has a corresponding test in `tests/test_cases.py`
-- [ ] `pytest tests/test_cases.py` passes locally
+- [ ] Behavioral changes have appropriate backend or native GUI regression coverage
+- [ ] `python -m pytest -q` passes locally; tool-dependent skips are reported
+- [ ] Relevant native smoke scripts pass for UI changes
+- [ ] Dependency changes are in `requirements.txt`; install with the interpreter used to launch
 - [ ] No direct changes to `main` or `dev`
 - [ ] Commit messages follow the prefix standard
 - [ ] UI changes use tokens from `ui/ui_assets.py` — no hard-coded colors, fonts, or corner radii
